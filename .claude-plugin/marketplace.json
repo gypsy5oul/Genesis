@@ -1,6 +1,6 @@
 {
   "name": "claude-skills",
-  "owner": { "name": "6D Technologies", "email": "vishnu.prakash@6dtech.co.in" },
+  "owner": { "name": "gypsy5oul", "email": "vishnuraveendran@gmail.com" },
   "plugins": [
     {
       "name": "genesis",

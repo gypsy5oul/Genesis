@@ -92,3 +92,11 @@ test('prompt: exit 0 on garbage stdin', () => {
   const r = runHook('sdlc-prompt-hook.js', '{{{');
   assert.equal(r.status, 0);
 });
+test('prompt: gate reminder sanitizes an oversized, escape-laden artifact field', () => {
+  const st = base();
+  st.stages.requirements.artifact = 'a'.repeat(5000) + '\x1b[2J\x07';
+  const out = JSON.parse(runHook('sdlc-prompt-hook.js', { cwd: tmpProject(st), prompt: 'hello' }).stdout);
+  const ctx = out.hookSpecificOutput.additionalContext;
+  assert.ok(ctx.length < 500, `expected <500 chars, got ${ctx.length}`);
+  assert.ok(!ctx.includes('\x1b'), 'additionalContext must contain no escape char');
+});

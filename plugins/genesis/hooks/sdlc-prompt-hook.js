@@ -5,7 +5,7 @@
 //  2. "approve <stage>" → deterministic state mutation, block with result. Question guard.
 //  3. Pending gate → one-line additionalContext reminder (survives compaction).
 // Contract: always exit 0; never inject unvalidated file bytes.
-const { STAGES, readState, pendingGate, renderStatus, approveStage, stageEntry } = require('./sdlc-state');
+const { STAGES, readState, pendingGate, renderStatus, approveStage, stageEntry, clean } = require('./sdlc-state');
 
 let input = '';
 process.stdin.on('data', c => { input += c; });
@@ -39,7 +39,7 @@ process.stdin.on('end', () => {
     if (state) {
       const gate = pendingGate(state);
       if (gate) {
-        const artifact = stageEntry(state, gate).artifact || 'the stage artifact';
+        const artifact = clean(stageEntry(state, gate).artifact || 'the stage artifact');
         process.stdout.write(JSON.stringify({
           hookSpecificOutput: {
             hookEventName: 'UserPromptSubmit',

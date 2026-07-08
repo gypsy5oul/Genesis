@@ -108,12 +108,12 @@ test('clean strips control chars and truncates', () => {
   assert.equal(lib.clean('x'.repeat(500), 10).length, 10);
   assert.equal(lib.clean(null), '');
 });
-test('summaryLine sanitizes an oversized, escape-laden idea field', () => {
+test('renderStatus sanitizes an oversized, escape-laden idea field (clamped length)', () => {
   const st = base();
   st.idea = 'x'.repeat(10000) + '\x1b[2J';
-  const line = lib.summaryLine(st);
-  assert.ok(line.length <= 400, `expected <=400 chars, got ${line.length}`);
-  assert.ok(!/[\x1b\x7f\x00-\x08\x0b\x0c\x0e-\x1f]/.test(line), 'summaryLine must contain no escape/control chars');
+  const out = lib.renderStatus(st);
+  assert.ok(out.length <= 1000, `expected <=1000 chars, got ${out.length}`);
+  assert.ok(!/[\x1b\x7f\x00-\x08\x0b\x0c\x0e-\x1f]/.test(out), 'renderStatus must contain no escape/control chars (idea field)');
 });
 test('renderStatus sanitizes an oversized, escape-laden idea field', () => {
   const st = base();

@@ -3,7 +3,7 @@ export const meta = {
   description: 'Per-module test writing, execution, and one defect-fix round',
   phases: [{ title: 'Write+Run' }, { title: 'Fix' }, { title: 'Verify' }],
 }
-// args: { modules: [{name, paths: string[], testCommand: string}] }
+// args: { modules: [{name, paths: string[], testCommand: string, discipline?: string}] }
 const RESULT = {
   type: 'object', required: ['passed', 'failed', 'defects'],
   properties: {
@@ -32,7 +32,7 @@ const results = await pipeline(
     if (!blocking.length) return { module: m.name, ...result, fixedRound: false }
     await agent(
       `Fix product defects in module "${m.name}" (paths: ${m.paths.join(', ')}). Each has a failing test proving it — make them pass without weakening the tests:\n${blocking.map(d => `${d.severity} | ${d.location} | ${d.problem} | test: ${d.failingTest}`).join('\n')}\nRead docs/sdlc/04-design.md first — ADRs binding. Builder report back.`,
-      { label: `fix:${m.name}`, phase: 'Fix', agentType: 'backend-dev' })
+      { label: `fix:${m.name}`, phase: 'Fix', agentType: m.discipline || 'backend-dev' })
     const verify = await agent(
       `Re-run tests for module "${m.name}" with: ${m.testCommand}. Report pass/fail counts and remaining defects.`,
       { label: `verify:${m.name}`, phase: 'Verify', agentType: 'qa-engineer', schema: RESULT })

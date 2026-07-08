@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 // UserPromptSubmit hook (spec §10.1):
-//  1. /genesis:status (also /sdlc:status, /status-sdlc variants) → block, render board. Zero model tokens.
+//  1. /genesis:status or /sdlc-status (namespaced only, avoids colliding with built-ins) → block, render board. Zero model tokens.
 //  2. "approve <stage>" → deterministic state mutation, block with result. Question guard.
 //  3. Pending gate → one-line additionalContext reminder (survives compaction).
 // Contract: always exit 0; never inject unvalidated file bytes.
@@ -16,8 +16,8 @@ process.stdin.on('end', () => {
     const cwd = (data && typeof data.cwd === 'string') ? data.cwd : process.cwd();
     const prompt = String((data && data.prompt) || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
-    // 1. status command — accept namespaced and bare forms
-    if (/^\/(?:genesis:)?(?:sdlc[-:])?status\b/.test(prompt)) {
+    // 1. status command — only the namespaced forms (avoid colliding with built-ins)
+    if (/^\/(?:genesis:status|sdlc-status)\b/.test(prompt)) {
       const state = readState(cwd);
       const reason = state ? renderStatus(state) : 'No SDLC project here. Run /genesis:init first.';
       process.stdout.write(JSON.stringify({ decision: 'block', reason }));
@@ -27,7 +27,7 @@ process.stdin.on('end', () => {
     // 2. approvals — questions about approving are not approvals
     const isQuestion = /\?\s*$/.test(prompt) ||
       /^(what|whats|what's|why|how|when|where|who|should|shall|can|could|would|do|does|did|is|are)\b/.test(prompt);
-    const m = new RegExp('^(?:please )?approve (' + STAGES.join('|') + ')\\b').exec(prompt);
+    const m = new RegExp('^(?:please )?approve (' + STAGES.join('|') + ')\\s*[.!]*$').exec(prompt);
     if (m && !isQuestion) {
       const res = approveStage(cwd, m[1]);
       process.stdout.write(JSON.stringify({ decision: 'block', reason: res.msg }));

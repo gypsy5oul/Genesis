@@ -7,7 +7,7 @@ Virtual software company for Claude Code: a gated 10-stage SDLC driven by 11 rol
 ## Install
 
 /plugin marketplace add <this-repo-url>
-/plugin install genesis
+/plugin install genesis@claude-skills
 
 Local dev: clone this repo, run Claude Code with `--plugin-dir /opt/claude-skills/plugins/genesis`.
 

@@ -30,7 +30,7 @@ const valid = proposals.map((p, i) => ({ ...p, angle: ANGLES[i] })).filter(p => 
 if (valid.length < 2) return { error: 'fewer than 2 proposals survived', proposals: valid }
 const judges = await parallel([0, 1].map(j => () =>
   agent(`Judge these ${valid.length} architecture proposals against the requirements in ${args.requirementsPath}. Score each 1-10 (fit, simplicity, risk). Proposals: ${JSON.stringify(valid)}`,
-    { label: `judge:${j}`, phase: 'Judge', schema: VERDICT_FOR(valid.length) })))
+    { label: `judge:${j}`, phase: 'Judge', schema: VERDICT_FOR(valid.length), model: 'opus' })))
 const totals = valid.map((_, i) =>
   judges.filter(Boolean).reduce((sum, v) => sum + (v.scores[i] || 0), 0))
 const winnerIndex = totals.indexOf(Math.max(...totals))

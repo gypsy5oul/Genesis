@@ -63,6 +63,15 @@ test('prompt: question is NOT approval', () => {
   assert.equal(lib.readState(d).stages.requirements.status, 'awaiting-approval');
   if (r.stdout.trim()) assert.equal(JSON.parse(r.stdout).decision, undefined);
 });
+test('prompt: "approve requirements later" is not an approval (no end anchor bypass)', () => {
+  const d = tmpProject(base());
+  const r = runHook('sdlc-prompt-hook.js', { cwd: d, prompt: 'approve requirements later' });
+  assert.equal(lib.readState(d).stages.requirements.status, 'awaiting-approval');
+  if (r.stdout.trim()) {
+    const out = JSON.parse(r.stdout);
+    assert.notEqual(out.decision, 'block');
+  }
+});
 test('prompt: approve of non-awaiting stage blocks with explanation, no mutation', () => {
   const d = tmpProject(base());
   const out = JSON.parse(runHook('sdlc-prompt-hook.js', { cwd: d, prompt: 'approve design' }).stdout);

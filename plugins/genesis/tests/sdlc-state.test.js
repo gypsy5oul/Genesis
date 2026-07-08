@@ -70,6 +70,21 @@ test('approveStage flips awaiting-approval to approved', () => {
   assert.ok(s.stages.requirements.approvedAt);
   assert.equal(s.decisions.length, 1);
 });
+test('approveStage advances currentStage to the next stage', () => {
+  const d = tmpProject(base());
+  lib.approveStage(d, 'requirements');
+  const s = lib.readState(d);
+  assert.equal(s.currentStage, lib.nextStage('requirements'));
+});
+test('approveStage on last stage keeps currentStage at that stage', () => {
+  const st = base();
+  st.currentStage = 'maintain';
+  st.stages.maintain = { status: 'awaiting-approval', artifact: 'docs/sdlc/10-maintenance.md' };
+  const d = tmpProject(st);
+  lib.approveStage(d, 'maintain');
+  const s = lib.readState(d);
+  assert.equal(s.currentStage, 'maintain');
+});
 test('approveStage refuses stage not awaiting', () => {
   const r = lib.approveStage(tmpProject(base()), 'design');
   assert.equal(r.ok, false);
@@ -87,4 +102,23 @@ test('summaryLine mentions project and pending gate', () => {
 test('renderStatus lists all stages', () => {
   const out = lib.renderStatus(base());
   for (const s of lib.STAGES) assert.match(out, new RegExp('\\b' + s + '\\b'));
+});
+test('clean strips control chars and truncates', () => {
+  assert.equal(lib.clean('a\x1b[2Jb'), 'a[2Jb');
+  assert.equal(lib.clean('x'.repeat(500), 10).length, 10);
+  assert.equal(lib.clean(null), '');
+});
+test('summaryLine sanitizes an oversized, escape-laden idea field', () => {
+  const st = base();
+  st.idea = 'x'.repeat(10000) + '\x1b[2J';
+  const line = lib.summaryLine(st);
+  assert.ok(line.length <= 400, `expected <=400 chars, got ${line.length}`);
+  assert.ok(!/[\x1b\x7f\x00-\x08\x0b\x0c\x0e-\x1f]/.test(line), 'summaryLine must contain no escape/control chars');
+});
+test('renderStatus sanitizes an oversized, escape-laden idea field', () => {
+  const st = base();
+  st.idea = 'y'.repeat(10000) + '\x1b[2J';
+  const out = lib.renderStatus(st);
+  // renderStatus is intentionally multi-line, so \n is expected; other control/escape bytes are not.
+  assert.ok(!/[\x1b\x7f\x00-\x08\x0b\x0c\x0e-\x1f]/.test(out), 'renderStatus must contain no escape/control chars (newlines excepted)');
 });

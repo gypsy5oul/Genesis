@@ -7,6 +7,7 @@ Single source of truth — spec §3. Every stage skill follows this exactly.
 2. Check the prior stage (each SKILL.md names it) has `status: "approved"`. Not approved → refuse with one line: which stage blocks, how to approve. Exception: user explicitly says "run anyway" → proceed AND append `"override: ran <stage> before <prior> approved"` to `decisions`.
 3. If own stage status is `in-progress` and a partial artifact exists, resume from it — do not restart.
 4. Edit state.json directly (main session, no agent): set own stage `status: "in-progress"`, set `currentStage`.
+5. Stage launches a Workflow → record its run id in the stage's `runId` field immediately.
 
 ## Exit
 1. Write the stage artifact to its numbered path (each SKILL.md names it). Normal prose — a human reviews it.

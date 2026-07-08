@@ -26,6 +26,10 @@ function writeState(cwd, state) {
   fs.renameSync(tmp, p);
 }
 
+function clean(s, max = 200) {
+  return String(s == null ? '' : s).replace(/[\x00-\x1f\x7f]/g, '').slice(0, max);
+}
+
 function stageEntry(state, stage) {
   return (state.stages && state.stages[stage]) || { status: 'pending' };
 }
@@ -48,10 +52,10 @@ function nextStage(stage) {
 function summaryLine(state) {
   const done = STAGES.filter(s => stageEntry(state, s).status === 'approved').length;
   const gate = pendingGate(state);
-  let line = `SDLC project "${state.project}" — ${done}/${STAGES.length} stages approved, current stage: ${state.currentStage || 'not started'}.`;
+  let line = `SDLC project "${clean(state.project)}" — ${done}/${STAGES.length} stages approved, current stage: ${clean(state.currentStage) || 'not started'}.`;
   if (gate) {
-    const artifact = stageEntry(state, gate).artifact || 'artifact';
-    line += ` Stage "${gate}" awaiting approval — review ${artifact}, then say "approve ${gate}".`;
+    const artifact = clean(stageEntry(state, gate).artifact) || 'artifact';
+    line += ` Stage "${clean(gate)}" awaiting approval — review ${artifact}, then say "approve ${clean(gate)}".`;
   }
   return line;
 }
@@ -59,17 +63,17 @@ function summaryLine(state) {
 function renderStatus(state) {
   const rows = STAGES.map(s => {
     const e = stageEntry(state, s);
-    return `${s.padEnd(14)} ${e.status.padEnd(18)} ${e.artifact || '-'}`;
+    return `${s.padEnd(14)} ${clean(e.status || 'pending').padEnd(18)} ${clean(e.artifact) || '-'}`;
   });
   const gate = pendingGate(state);
   return [
-    `SDLC status — ${state.project}`,
-    `idea: ${state.idea || '-'}`,
+    `SDLC status — ${clean(state.project)}`,
+    `idea: ${clean(state.idea) || '-'}`,
     '',
     `${'stage'.padEnd(14)} ${'status'.padEnd(18)} artifact`,
     ...rows,
     '',
-    gate ? `Pending gate: say "approve ${gate}" to proceed.` : 'No pending gate.'
+    gate ? `Pending gate: say "approve ${clean(gate)}" to proceed.` : 'No pending gate.'
   ].join('\n');
 }
 
@@ -85,12 +89,13 @@ function approveStage(cwd, stage) {
   state.stages[stage] = e;
   state.decisions = Array.isArray(state.decisions) ? state.decisions : [];
   state.decisions.push(`approved ${stage} at ${e.approvedAt}`);
-  writeState(cwd, state);
   const next = nextStage(stage);
+  state.currentStage = next || stage;
+  writeState(cwd, state);
   return { ok: true, msg: `Stage "${stage}" approved.` + (next ? ` Next: /genesis:${next}` : ' All stages done.') };
 }
 
 module.exports = {
-  STAGES, MAX_STATE_BYTES, statePath, readState, writeState, stageEntry,
+  STAGES, MAX_STATE_BYTES, statePath, readState, writeState, stageEntry, clean,
   pendingGate, priorStage, nextStage, summaryLine, renderStatus, approveStage
 };

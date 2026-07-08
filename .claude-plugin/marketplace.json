@@ -1,0 +1,12 @@
+{
+  "name": "claude-skills",
+  "owner": { "name": "6D Technologies", "email": "vishnu.prakash@6dtech.co.in" },
+  "plugins": [
+    {
+      "name": "genesis",
+      "source": "./plugins/genesis",
+      "description": "From idea to production — your AI software company. Gated 10-stage SDLC driven by role agents (opus architect / sonnet senior / haiku junior).",
+      "version": "0.1.0"
+    }
+  ]
+}

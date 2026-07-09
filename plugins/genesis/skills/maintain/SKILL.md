@@ -13,7 +13,8 @@ Follow `../_shared/gate-protocol.md`, `../_shared/review-loop.md`, `../_shared/o
 1. **Triage** ($0/main session): classify bug|enhancement|incident, severity, owning discipline. Bugs get the Prove-It rule: `qa-engineer` reproduces with a failing test BEFORE any fix.
 2. **Route** — spawn the owning agent (`frontend-dev`/`backend-dev`/`devops-engineer`) with: triage note, failing test path, SPEC + ADR paths (still binding — drift dies here too).
 3. **Review** — `code-reviewer` on every change, review-findings contract. Enhancement touching architecture → needs an ADR addition via `solution-architect` first.
-4. **Log** — append to `10-maintenance.md`: date, item, classification, changes, evidence, reviewer verdict.
+4. **Reconcile** — `node <plugin root>/hooks/graph-index.js --files <files the routed agent's builder report listed>` (same reason as `develop`: the graph only sees the main session's own tool calls automatically). See `../_shared/graph-protocol.md`.
+5. **Log** — append to `10-maintenance.md`: date, item, classification, changes, evidence, reviewer verdict.
 5. Large enhancement (new feature area, >1 milestone of work) → recommend a fresh SDLC cycle (`/genesis:init` in a feature scope) instead of maintenance-mode creep.
 
 ## Exit criteria (per item, not per stage)

@@ -31,6 +31,7 @@ Read `../_shared/gate-protocol.md` first.
 }
 ```
 
-5. Tell the user: next command `/genesis:requirements`; status any time via `/genesis:status`; approvals by saying `approve <stage>`.
+5. Build the baseline code graph: run `node <plugin root>/hooks/graph-index.js --files <every file under the project root, respecting .gitignore>` (empty file list for a greenfield project — the graph starts empty and the incremental hook takes over from here). See `../_shared/graph-protocol.md`.
+6. Tell the user: next command `/genesis:requirements`; status any time via `/genesis:status`; approvals by saying `approve <stage>`.
 
 No agents spawned. No cost. Deterministic.

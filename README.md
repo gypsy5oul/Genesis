@@ -84,7 +84,7 @@ npm run validate                                    # structural validation
 npm run smoke                                       # deterministic-layer smoke test
 ```
 
-Plugin layout: `plugins/genesis/` — `agents/` (11 roles) · `skills/` (12 stages + `_shared` protocols) · `hooks/` (zero-token state machine) · `workflows/` (parallel develop/test/design-panel) · `evals/` + `tests/`.
+Plugin layout: `plugins/genesis/` — `agents/` (11 roles) · `skills/` (12 stages + codegraph + `_shared` protocols) · `hooks/` (state machine + code graph — both zero model tokens) · `workflows/` (parallel develop/test/design-panel) · `evals/` + `tests/`.
 
 ## License
 

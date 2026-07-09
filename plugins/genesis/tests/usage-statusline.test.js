@@ -55,3 +55,19 @@ test('caps the read so an oversized line file cannot flood the statusline', () =
   assert.equal(r.status, 0);
   assert.ok(r.stdout.length <= 256);
 });
+
+test('exits 0 (not 1) when the line file is empty', () => {
+  const d = tmpConfigDir();
+  fs.writeFileSync(path.join(d, '.genesis-usage-line'), '');
+  const r = run(d);
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+});
+
+test('exits 0 (not 1) when the line file contains only control bytes that get stripped to nothing', () => {
+  const d = tmpConfigDir();
+  fs.writeFileSync(path.join(d, '.genesis-usage-line'), '\x1b\x07\x01');
+  const r = run(d);
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+});

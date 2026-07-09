@@ -17,4 +17,7 @@ LINE_FILE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.genesis-usage-line"
 # injection via the line file's contents.
 CONTENT=$(head -c 256 "$LINE_FILE" 2>/dev/null | tr -d '\000-\037')
 
-[ -n "$CONTENT" ] && printf '%s' "$CONTENT"
+if [ -n "$CONTENT" ]; then
+  printf '%s' "$CONTENT"
+fi
+exit 0

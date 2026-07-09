@@ -2,8 +2,8 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { mutateGraph } = require('./graph-store');
-const { parseFile } = require('./graph-parse');
+const { mutateGraph, readGraph } = require('./graph-store');
+const { parseFile, detectLang } = require('./graph-parse');
 
 function toRel(cwd, absFile) {
   return path.relative(cwd, absFile).split(path.sep).join('/');
@@ -61,11 +61,22 @@ function indexFile(cwd, absFile) {
     return { ok: false, msg: `${absFile} is outside the project` };
   }
   try {
+    // Cheap read-only peek before taking the lock: a file with an
+    // unsupported extension that's already recorded in `skipped` from a
+    // prior index can never turn parseable just by being edited again (its
+    // extension doesn't change), so re-running the full locked
+    // read-parse-write cycle for every such edit is pure churn for zero
+    // benefit. A first-time-seen unsupported file still goes through the
+    // normal locked path once, to get recorded into `skipped`.
+    if (detectLang(relFile) === null && readGraph(cwd).skipped.includes(relFile)) {
+      return { ok: true, updated: false };
+    }
     return mutateGraph(cwd, (graph) => {
       const next = pruneFile(graph, relFile);
       const parsed = parseFile(absFile, relFile);
       if (!parsed) {
         next.skipped.push(relFile);
+        delete next.files[relFile];
         return { graph: next, result: { ok: true, updated: false } };
       }
       next.nodes.push(...parsed.nodes);

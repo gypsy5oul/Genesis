@@ -69,6 +69,35 @@ test('indexFile records an unsupported file as skipped, not an error', () => {
   assert.ok(g.skipped.includes('README.md'));
 });
 
+test('indexFile does not take the lock / rewrite the graph on a second edit of an already-skipped unsupported file', () => {
+  const d = tmpProject();
+  const abs = writeSrc(d, 'README.md', '# hi\n');
+  idx.indexFile(d, abs); // first time — recorded into skipped, graph rewritten once
+  const graphFile = store.graphPath(d);
+  const before = fs.statSync(graphFile).mtimeMs;
+  const before2 = fs.readFileSync(graphFile, 'utf8');
+  const r = idx.indexFile(d, abs); // second time — already known-unsupported, should be a no-op
+  const after = fs.statSync(graphFile).mtimeMs;
+  const after2 = fs.readFileSync(graphFile, 'utf8');
+  assert.equal(r.ok, true);
+  assert.equal(r.updated, false);
+  assert.equal(before, after, 'graph.json must not be rewritten for an already-skipped file');
+  assert.equal(before2, after2, 'graph.json contents must be byte-identical (no lock/rewrite churn)');
+});
+
+test('indexFile removes the stale files[relFile] hash entry when a previously-parsed file later fails to parse', () => {
+  const d = tmpProject();
+  const abs = writeSrc(d, 'src/a.js', 'function f(){}\n');
+  idx.indexFile(d, abs);
+  assert.ok(store.readGraph(d).files['src/a.js'], 'sanity: file should be tracked after a successful parse');
+  // Overwrite with content that makes parseFile return null (oversized file).
+  fs.writeFileSync(abs, 'x'.repeat(store.MAX_FILE_BYTES + 10));
+  idx.indexFile(d, abs);
+  const g = store.readGraph(d);
+  assert.equal(g.files['src/a.js'], undefined, 'stale files[] hash entry must be removed on parse failure');
+  assert.ok(g.skipped.includes('src/a.js'));
+});
+
 test('indexFile refuses a file outside the project root', () => {
   const d = tmpProject();
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'graph-index-outside-'));

@@ -86,6 +86,20 @@ test('session-start: warns before replacing a different existing statusline, nev
   const settingsAfter = JSON.parse(fs.readFileSync(path.join(configDir, 'settings.json'), 'utf8'));
   assert.equal(settingsAfter.statusLine.command, 'bash /other/caveman-statusline.sh');
 });
+test('session-start: strips control characters from the statusline command before including it in the nudge', () => {
+  const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'genesis-cfg-'));
+  const evilCommand = 'bash /other/\x1b[31mcaveman\x07-statusline.sh';
+  fs.writeFileSync(path.join(configDir, 'settings.json'), JSON.stringify({ statusLine: { command: evilCommand } }));
+  const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'hooks', 'sdlc-session-start.js')], {
+    input: JSON.stringify({ cwd: tmpProject(null) }),
+    encoding: 'utf8', timeout: 5000,
+    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir }
+  });
+  assert.equal(r.status, 0);
+  assert.ok(!/[\x00-\x1f\x7f]/.test(r.stdout), 'control characters must be stripped from stdout');
+  assert.match(r.stdout, /caveman-statusline\.sh/);
+});
+
 test('prompt: blocks /genesis:status with rendered board', () => {
   const out = JSON.parse(runHook('sdlc-prompt-hook.js', { cwd: tmpProject(base()), prompt: '/genesis:status' }).stdout);
   assert.equal(out.decision, 'block');

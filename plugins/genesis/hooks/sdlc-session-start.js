@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { readState, summaryLine } = require('./sdlc-state');
+const { readState, summaryLine, clean } = require('./sdlc-state');
 
 function claudeConfigDir() {
   return process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
@@ -29,7 +29,12 @@ function statuslineNudge() {
     if (current.includes('usage-statusline.sh')) {
       return null;
     }
-    return `Statusline is currently set to a different command ("${current}"). If the user asks about Genesis's usage-tracking statusline, mention it would replace that — ask before changing it, never overwrite silently.`;
+    // The statusline command string comes straight from the user's own
+    // settings.json, but that doesn't make it safe to interpolate verbatim
+    // into text that enters model context — same sanitization sdlc-state.js's
+    // clean() applies to every other value that does (control/bidi/zero-width
+    // chars stripped, length-capped).
+    return `Statusline is currently set to a different command ("${clean(current)}"). If the user asks about Genesis's usage-tracking statusline, mention it would replace that — ask before changing it, never overwrite silently.`;
   } catch {
     return null;
   }

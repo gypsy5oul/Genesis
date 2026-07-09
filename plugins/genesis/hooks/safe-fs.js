@@ -54,7 +54,7 @@ function appendFileSafe(cwd, filePath, line) {
 // abandoned so a crashed process can't wedge future callers forever.
 const LOCK_STALE_MS = 10000;
 const LOCK_RETRY_MS = 20;
-const LOCK_TIMEOUT_MS = 2000;
+const LOCK_TIMEOUT_MS = 5000;
 
 function acquireLock(lockPath) {
   fs.mkdirSync(path.dirname(lockPath), { recursive: true });

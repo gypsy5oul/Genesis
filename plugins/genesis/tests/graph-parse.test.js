@@ -71,6 +71,21 @@ test('extractFromTree attributes each declarator in a multi-declarator const sta
   assert.deepEqual(b.lines, [4, 6], 'b\'s recorded lines should span only its own arrow function value, not the whole statement');
 });
 
+test('extractFromTree resolves a call inside a destructuring-default object pattern', () => {
+  const root = parseJs('function outer() {\n  const { a = helper() } = getObj();\n  return a;\n}\nfunction helper(){ return 1; }\nfunction getObj(){ return {}; }\n');
+  const { edges } = gp.extractFromTree(root, 'src/w.js');
+  const calls = edges.filter(e => e.kind === 'calls');
+  assert.ok(calls.some(e => e.to === 'src/w.js#helper'), `expected a call edge to helper, got: ${JSON.stringify(calls)}`);
+  assert.ok(calls.some(e => e.to === 'src/w.js#getObj'), `expected a call edge to getObj, got: ${JSON.stringify(calls)}`);
+});
+
+test('extractFromTree resolves a call inside a destructuring-default array pattern', () => {
+  const root = parseJs('function outer() {\n  const [ x = helper() ] = arr;\n  return x;\n}\nfunction helper(){ return 1; }\n');
+  const { edges } = gp.extractFromTree(root, 'src/w2.js');
+  const calls = edges.filter(e => e.kind === 'calls');
+  assert.ok(calls.some(e => e.to === 'src/w2.js#helper'), `expected a call edge to helper, got: ${JSON.stringify(calls)}`);
+});
+
 test('extractFromTree emits a relative import edge', () => {
   const root = parseJs("import { validateEmail } from './validate.js';\n");
   const { edges } = gp.extractFromTree(root, 'src/users.js');

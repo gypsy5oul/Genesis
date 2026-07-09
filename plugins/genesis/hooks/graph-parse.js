@@ -162,6 +162,14 @@ function extractFromTree(rootNode, relFile) {
         // early, skipping the generic recursion for this node) also lets
         // each declarator's node use its OWN value's line span instead of
         // the whole statement's.
+        //
+        // The name node also needs walking for anything OTHER than a plain
+        // named function declaration (`const helper = () => {...}` — a bare
+        // identifier name, nothing to walk): a destructuring pattern's
+        // default initializers (`const { a = foo() } = ...`, `const [ x =
+        // bar() ] = ...`) live in the NAME node's subtree, not the value's,
+        // so skipping it would silently drop calls made inside a
+        // destructuring default.
         for (const decl of node.namedChildren) {
           if (decl.type !== 'variable_declarator') continue;
           const nameNode = decl.childForFieldName('name');
@@ -173,8 +181,9 @@ function extractFromTree(rootNode, relFile) {
               declScope = nodeId(nameNode.text);
             }
             walk(valueNode, true, declScope, className);
-          } else if (valueNode) {
-            walk(valueNode, insideFunction, scope, className);
+          } else {
+            if (nameNode) walk(nameNode, insideFunction, scope, className);
+            if (valueNode) walk(valueNode, insideFunction, scope, className);
           }
         }
         return;

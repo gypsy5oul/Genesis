@@ -1,11 +1,48 @@
 #!/usr/bin/env node
 'use strict';
+const fs = require('fs');
 const path = require('path');
 const { mutateGraph } = require('./graph-store');
 const { parseFile } = require('./graph-parse');
 
 function toRel(cwd, absFile) {
   return path.relative(cwd, absFile).split(path.sep).join('/');
+}
+
+// graph-parse.js's resolveImportTarget stays pure (no filesystem access) and
+// only produces the extensionless relative candidate. Actual on-disk
+// resolution happens here, where cwd/disk access already live. Tries the
+// bare extensionless path first, then real file extensions, then directory
+// index files — the common TypeScript "import './b'" convention where the
+// tracked file is keyed 'src/b.ts'. First existing regular file wins.
+const IMPORT_RESOLUTION_SUFFIXES = [
+  '', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  '/index.ts', '/index.tsx', '/index.js', '/index.jsx', '/index.mjs', '/index.cjs'
+];
+
+function resolveImportEdgeTarget(cwd, extensionlessRelTarget) {
+  for (const suffix of IMPORT_RESOLUTION_SUFFIXES) {
+    const candidate = extensionlessRelTarget + suffix;
+    try {
+      if (fs.statSync(path.join(cwd, candidate)).isFile()) return candidate;
+    } catch { /* try next candidate */ }
+  }
+  return null;
+}
+
+// Resolves every 'imports'-kind edge's extensionless target against the real
+// filesystem, rewriting edge.to on a match. Edges that resolve to nothing
+// confirmable are DROPPED, not left pointing at a path we can't verify
+// exists — this codebase's established "silence, not a wrong answer" policy
+// (see graph-protocol.md). 'calls'-kind edges pass through unchanged.
+function resolveImportEdges(cwd, edges) {
+  const out = [];
+  for (const edge of edges) {
+    if (edge.kind !== 'imports') { out.push(edge); continue; }
+    const resolved = resolveImportEdgeTarget(cwd, edge.to);
+    if (resolved) out.push({ ...edge, to: resolved });
+  }
+  return out;
 }
 
 function pruneFile(graph, relFile) {
@@ -32,7 +69,7 @@ function indexFile(cwd, absFile) {
         return { graph: next, result: { ok: true, updated: false } };
       }
       next.nodes.push(...parsed.nodes);
-      next.edges.push(...parsed.edges);
+      next.edges.push(...resolveImportEdges(cwd, parsed.edges));
       next.files[relFile] = { lang: parsed.lang, hash: parsed.hash };
       return { graph: next, result: { ok: true, updated: true } };
     });
@@ -88,4 +125,4 @@ if (require.main === module) {
   else runHook();
 }
 
-module.exports = { indexFile, indexFiles, pruneFile };
+module.exports = { indexFile, indexFiles, pruneFile, resolveImportEdgeTarget, resolveImportEdges };

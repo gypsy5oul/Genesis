@@ -124,6 +124,34 @@ test('indexFile re-indexing the TARGET of a cross-file import does not delete th
   assert.deepEqual(g.edges, [{ from: 'src/a.js', to: 'src/b.js', kind: 'imports' }]);
 });
 
+test('indexFile resolves an extensionless import against an exact-match file on disk', () => {
+  const d = tmpProject();
+  const a = writeSrc(d, 'src/a.ts', "import './b';\nfunction f(){}\n");
+  const b = writeSrc(d, 'src/b.ts', 'function g(){}\n');
+  idx.indexFile(d, a);
+  idx.indexFile(d, b);
+  const g = store.readGraph(d);
+  assert.deepEqual(g.edges, [{ from: 'src/a.ts', to: 'src/b.ts', kind: 'imports' }]);
+});
+
+test('indexFile resolves an extensionless import against a directory index file on disk', () => {
+  const d = tmpProject();
+  const a = writeSrc(d, 'src/a.ts', "import './util';\nfunction f(){}\n");
+  const b = writeSrc(d, 'src/util/index.ts', 'function g(){}\n');
+  idx.indexFile(d, a);
+  idx.indexFile(d, b);
+  const g = store.readGraph(d);
+  assert.deepEqual(g.edges, [{ from: 'src/a.ts', to: 'src/util/index.ts', kind: 'imports' }]);
+});
+
+test('indexFile drops an import edge when no candidate file exists on disk (silence, not a wrong answer)', () => {
+  const d = tmpProject();
+  const a = writeSrc(d, 'src/a.ts', "import './nonexistent';\nfunction f(){}\n");
+  idx.indexFile(d, a);
+  const g = store.readGraph(d);
+  assert.equal(g.edges.filter(e => e.kind === 'imports').length, 0);
+});
+
 test('indexFile is safe under real concurrent processes indexing different files (mutateGraph atomicity, no lost update)', async () => {
   const d = tmpProject();
   writeSrc(d, 'src/a.js', 'function f(){}\n');

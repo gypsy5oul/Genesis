@@ -51,14 +51,19 @@ test('callers reports no callers found (not no data) for a symbol with zero call
 
 test('imports lists what a file imports', () => {
   const d = tmpProject();
+  // b.js must exist on disk before a.js is indexed — import edges only
+  // resolve (and persist) against a confirmed on-disk target (Finding 1 fix).
+  writeSrc(d, 'src/b.js', 'function f(){}\n');
   idx.indexFile(d, writeSrc(d, 'src/a.js', "import './b.js';\n"));
   assert.equal(q.imports(d, 'src/a.js'), 'src/b.js');
 });
 
 test('impact lists direct importers of a file', () => {
   const d = tmpProject();
-  idx.indexFile(d, writeSrc(d, 'src/a.js', "import './b.js';\n"));
-  idx.indexFile(d, writeSrc(d, 'src/b.js', 'function f(){}\n'));
+  const b = writeSrc(d, 'src/b.js', 'function f(){}\n');
+  const a = writeSrc(d, 'src/a.js', "import './b.js';\n");
+  idx.indexFile(d, b);
+  idx.indexFile(d, a);
   assert.equal(q.impact(d, 'src/b.js'), 'src/a.js');
 });
 

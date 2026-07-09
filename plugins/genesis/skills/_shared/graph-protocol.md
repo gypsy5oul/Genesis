@@ -41,7 +41,10 @@ Never invent a location the query didn't return.
 
 - Languages: JavaScript, TypeScript, TSX only.
 - `imports` edges: relative specifiers only (`./x`, `../x`). Bare package
-  imports (`react`) aren't resolved to a file and don't appear.
+  imports (`react`) aren't resolved to a file and don't appear. Extensionless
+  specifiers (`./b`) are resolved against the real filesystem — exact match,
+  then `.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs`, then `/index.*` — and dropped
+  entirely if no candidate exists on disk (silence, not a wrong answer).
 - `calls` edges: same-file only, and only to a plain top-level
   function/const-arrow referenced by its bare name. Method-target calls
   (`obj.m()`, `this.m()`) are never resolved, even within the same file

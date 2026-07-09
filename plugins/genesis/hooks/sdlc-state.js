@@ -1,6 +1,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { writeFileSafe, withLock } = require('./safe-fs');
 
 const STAGES = ['requirements','feasibility','plan','design','develop','test','uat','deploy','monitor','maintain'];
 const STATUSES = ['pending','in-progress','awaiting-approval','approved'];
@@ -23,86 +24,8 @@ function readState(cwd) {
   } catch { return null; }
 }
 
-// Refuses to write through a symlinked directory component between cwd and
-// the target path — closes the gap where a malicious cloned repo ships
-// docs/ (or docs/sdlc/) as a symlink to write state outside the project.
-function assertNoSymlinkInPath(cwd, targetDir) {
-  const rel = path.relative(cwd, targetDir);
-  let cur = cwd;
-  for (const part of rel.split(path.sep).filter(Boolean)) {
-    cur = path.join(cur, part);
-    let st;
-    try { st = fs.lstatSync(cur); } catch { return; } // not created yet — fine
-    if (st.isSymbolicLink()) {
-      throw new Error(`refusing to write through symlinked path: ${cur}`);
-    }
-  }
-}
-
 function writeState(cwd, state) {
-  const p = statePath(cwd);
-  assertNoSymlinkInPath(cwd, path.dirname(p));
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  try {
-    if (fs.lstatSync(p).isSymbolicLink()) {
-      throw new Error(`refusing to write: ${p} is a symlink`);
-    }
-  } catch (e) {
-    if (e.code !== 'ENOENT') throw e;
-  }
-  if (fs.existsSync(p)) {
-    try { fs.copyFileSync(p, p + '.bak'); } catch { /* backup failure must not block the write */ }
-  }
-  // Unique per call — a fixed temp name lets two concurrent processes
-  // clobber each other's in-flight write.
-  const tmp = `${p}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n');
-  fs.renameSync(tmp, p);
-}
-
-// Advisory lock via O_EXCL so concurrent processes' read-modify-write
-// (e.g. two approveStage calls) can't lose an update to a last-writer-wins
-// race. Stale locks (LOCK_STALE_MS old) are treated as abandoned.
-const LOCK_STALE_MS = 10000;
-const LOCK_RETRY_MS = 20;
-const LOCK_TIMEOUT_MS = 2000;
-
-function acquireLock(cwd) {
-  const lockPath = statePath(cwd) + '.lock';
-  fs.mkdirSync(path.dirname(lockPath), { recursive: true });
-  const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  for (;;) {
-    try {
-      fs.writeFileSync(lockPath, String(process.pid), { flag: 'wx' });
-      return lockPath;
-    } catch (e) {
-      if (e.code !== 'EEXIST') throw e;
-      let age = Infinity;
-      try { age = Date.now() - fs.statSync(lockPath).mtimeMs; } catch { /* raced away */ }
-      if (age > LOCK_STALE_MS) {
-        try { fs.unlinkSync(lockPath); } catch { /* raced away, retry loop handles it */ }
-        continue;
-      }
-      if (Date.now() > deadline) {
-        throw new Error(`timed out waiting for lock: ${lockPath}`);
-      }
-      const buf = new Int32Array(new SharedArrayBuffer(4));
-      Atomics.wait(buf, 0, 0, LOCK_RETRY_MS);
-    }
-  }
-}
-
-function releaseLock(lockPath) {
-  try { fs.unlinkSync(lockPath); } catch { /* best-effort */ }
-}
-
-function withLock(cwd, fn) {
-  const lockPath = acquireLock(cwd);
-  try {
-    return fn();
-  } finally {
-    releaseLock(lockPath);
-  }
+  writeFileSafe(cwd, statePath(cwd), JSON.stringify(state, null, 2) + '\n');
 }
 
 // U+200B-U+200F: zero-width space/joiners + LTR/RTL marks.
@@ -166,7 +89,7 @@ function renderStatus(state) {
 
 function approveStage(cwd, stage) {
   try {
-    return withLock(cwd, () => {
+    return withLock(statePath(cwd) + '.lock', () => {
       const state = readState(cwd);
       if (!state) return { ok: false, msg: 'No docs/sdlc/state.json found. Run /genesis:init first.' };
       const e = stageEntry(state, stage);

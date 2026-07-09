@@ -14,7 +14,7 @@ Single source of truth — spec §3. Every stage skill follows this exactly.
 2. Verify every exit criterion listed in the SKILL.md. Unmet criterion → fix or list it in the gate summary as unresolved.
 3. Edit state.json: own stage → `status: "awaiting-approval"`, `artifact`, `exitCriteria` (the list, verbatim), `summary` (one line, for progressive disclosure), `reviewVerdict` (one line: reviewer's verdict + unresolved counts).
 4. Print a gate summary: what was produced, open issues, exact artifact path, the sentence `Say "approve <stage>" after review.`
-5. STOP. Never invoke the next stage. Never edit `status` to `approved` — only the human's approval (hook) does that.
+5. STOP. Never invoke the next stage. Never edit `status` to `approved` — only the human's approval (hook) does that. This is enforced, not just documented: a PreToolUse hook (`sdlc-state-guard.js`) denies any `Edit`/`Write`/`MultiEdit` to `state.json` that would set a stage's `status` to `"approved"`.
 
 ## Role-scoped writes (spec §11.8)
 - Stage skill (main session): stage status (`in-progress`/`awaiting-approval`), `currentStage`, `artifact`, `exitCriteria`, `summary`.

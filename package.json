@@ -1,0 +1,9 @@
+{
+  "name": "genesis",
+  "private": true,
+  "scripts": {
+    "test": "node --test plugins/genesis/tests/*.test.js",
+    "validate": "node plugins/genesis/evals/validate-structure.js",
+    "smoke": "bash plugins/genesis/evals/smoke.sh"
+  }
+}

@@ -11,8 +11,8 @@ Follow `../_shared/gate-protocol.md`, `../_shared/review-loop.md`, `../_shared/o
 
 ## Playbook
 1. Gate entry; mark `in-progress`.
-2. **Module map** ($0 tier — do it yourself): from the design doc's component list, build `modules: [{name, paths, testCommand, discipline}]`, where `discipline` is the owning agent (`frontend-dev`|`backend-dev`|`devops-engineer`) — used to route defect fixes to the right dev. Project has one test command → one module per component, same command.
-3. **Fan-out** — run Workflow scriptPath `<this skill's base dir>/../../workflows/test.js` with `{modules}`. Per module: qa-engineer writes/extends tests against acceptance criteria → runs → dev agent fixes product defects (Prove-It: failing test exists before any fix).
+2. **Module map** ($0 tier — do it yourself): from the design doc's component list, build `modules: [{name, paths, testCommand, discipline}]`, where `discipline` is the owning agent (`frontend-dev`|`backend-dev`|`devops-engineer`) — used to route defect fixes to the right dev. Project has one test command → one module per component, same command. Modules run in parallel (step 3) — if their test commands share a port, database, or lockfile, note that in the module map and give each a distinct one (env var, ephemeral port, per-module DB name); otherwise concurrent runs can flake on contention that has nothing to do with the code under test.
+3. **Fan-out** — run Workflow scriptPath `<this skill's base dir>/../../workflows/test.js` with `{modules}`. Per module: qa-engineer writes/extends tests against acceptance criteria → runs → dev agent fixes product defects (Prove-It: failing test exists before any fix). **Workflow tool unavailable or errors**: tell the user, then run each module's QA→fix sequence yourself in the main session instead of skipping it.
 4. **Full run** — main session: full suite + coverage if available. Paste evidence.
 5. Write `06-testing.md`: per-module results, defect log (found/fixed/open with severity), coverage, acceptance criteria WITHOUT covering tests (explicit list).
 6. Chores; gate exit.

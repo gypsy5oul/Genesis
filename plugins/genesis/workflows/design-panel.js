@@ -31,7 +31,8 @@ if (valid.length < 2) return { error: 'fewer than 2 proposals survived', proposa
 const judges = await parallel([0, 1].map(j => () =>
   agent(`Judge these ${valid.length} architecture proposals against the requirements in ${args.requirementsPath}. Score each 1-10 (fit, simplicity, risk). Proposals: ${JSON.stringify(valid)}`,
     { label: `judge:${j}`, phase: 'Judge', schema: VERDICT_FOR(valid.length), model: 'opus' })))
-const totals = valid.map((_, i) =>
-  judges.filter(Boolean).reduce((sum, v) => sum + (v.scores[i] || 0), 0))
+const liveJudges = judges.filter(Boolean)
+if (!liveJudges.length) return { error: 'all judges failed to return a verdict', proposals: valid.map(p => ({ angle: p.angle, summary: p.summary })) }
+const totals = valid.map((_, i) => liveJudges.reduce((sum, v) => sum + (v.scores[i] || 0), 0))
 const winnerIndex = totals.indexOf(Math.max(...totals))
-return { proposals: valid.map((p, i) => ({ angle: p.angle, summary: p.summary, score: totals[i] })), winnerIndex }
+return { proposals: valid.map((p, i) => ({ angle: p.angle, summary: p.summary, score: totals[i] })), winnerIndex, judgeCount: liveJudges.length }

@@ -28,7 +28,7 @@ Then in any project: `/genesis:init` and follow the stages.
 Prompting an agent "build me X" produces code with no requirements trail, no design decisions on record, no independent review, and no way to pick up where you left off. Genesis fixes each of those:
 
 - **Every stage produces a reviewable artifact** — a requirements doc with testable acceptance criteria, a design doc with binding architecture decisions (ADRs), code with review verdicts, a test report with coverage, a traceability matrix proving every requirement is implemented and tested.
-- **Nothing advances without your approval.** Stages end `awaiting-approval`; you review the artifact and say `approve <stage>`. Enforced in code, not vibes — running `/genesis:develop` before design is approved gets refused, and "should I approve design?" is never treated as an approval.
+- **Nothing advances without your approval.** Stages end `awaiting-approval`; you review the artifact and say `approve <stage>`. The mutation to `approved` is code, not a prompt convention: only the `approve <stage>` hook path can write it, and a PreToolUse guard hook denies any direct `Edit`/`Write` to `state.json` that tries to set that status another way. "should I approve design?" is never treated as an approval. (Stage entry order — refusing `/genesis:develop` before design is approved — is still a skill-level check per `gate-protocol.md`, backed by `approveStage`'s own prior-stage check as defense in depth.)
 - **Work survives sessions.** Project state lives in your repo (`docs/sdlc/state.json`). Close the session, come back tomorrow, or hand the next stage to a teammate — a session-start hook briefs every new session on exactly where the build stands. Survives `/clear` and context compaction.
 
 ## How the building actually works
@@ -79,9 +79,9 @@ Development fans out across disjoint file sets — architect breaks the design i
 ## Development
 
 ```
-node --test plugins/genesis/tests/                 # 32 unit tests (hooks + state)
-node plugins/genesis/evals/validate-structure.js   # structural validation
-plugins/genesis/evals/smoke.sh                     # deterministic-layer smoke test
+npm test                                            # 56 unit tests (hooks + state + workflow decision logic)
+npm run validate                                    # structural validation
+npm run smoke                                       # deterministic-layer smoke test
 ```
 
 Plugin layout: `plugins/genesis/` — `agents/` (11 roles) · `skills/` (12 stages + `_shared` protocols) · `hooks/` (zero-token state machine) · `workflows/` (parallel develop/test/design-panel) · `evals/` + `tests/`.

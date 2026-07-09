@@ -51,6 +51,16 @@ test('priceFor matches the most specific prefix first', () => {
   assert.equal(ut.priceFor('some-unknown-model'), null);
 });
 
+test('priceFor resolves a bare dated claude-opus-4 ID (original 4.0) to the 15/75 tier, not the 4.5+ general bucket', () => {
+  const p = ut.priceFor('claude-opus-4-20250514');
+  assert.deepEqual({ input: p.input, output: p.output }, { input: 15.00, output: 75.00 });
+});
+
+test('priceFor resolves a dated claude-opus-4-5 ID to its own 5/25 tier, distinct from the 4.0 fallback', () => {
+  const p = ut.priceFor('claude-opus-4-5-20260101');
+  assert.deepEqual({ input: p.input, output: p.output }, { input: 5.00, output: 25.00 });
+});
+
 test('estimateCost prices all four token categories, cache-read cheapest', () => {
   const pricing = { input: 10, output: 20, cacheWrite: 12.5, cacheRead: 1 };
   const cost = ut.estimateCost({ inputTokens: 1e6, outputTokens: 1e6, cacheCreationTokens: 1e6, cacheReadTokens: 1e6 }, pricing);

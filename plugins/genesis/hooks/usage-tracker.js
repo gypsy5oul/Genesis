@@ -19,16 +19,19 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 // Anthropic changes rates. https://www.anthropic.com/pricing
 // Most-specific prefixes MUST come first — priceFor returns the first match.
 const MODEL_PRICING = [
+  ['claude-opus-4-5',     5.00, 25.00],
   ['claude-opus-4-1',    15.00, 75.00],
   ['claude-opus-4-0',    15.00, 75.00],
-  ['claude-opus-4',       5.00, 25.00],
+  ['claude-opus-4',      15.00, 75.00], // fallback: bare dated 4.0 IDs (e.g. claude-opus-4-20250514)
   ['claude-sonnet-4-5',   3.00, 15.00],
   ['claude-sonnet-4',     3.00, 15.00],
   ['claude-haiku-4-5',    1.00,  5.00],
   ['claude-haiku-4',      1.00,  5.00],
+  ['claude-3-7-sonnet',   3.00, 15.00],
   ['claude-3-5-sonnet',   3.00, 15.00],
   ['claude-3-5-haiku',    0.80,  4.00],
   ['claude-3-opus',      15.00, 75.00],
+  ['claude-3-haiku',      0.25,  1.25],
 ];
 const CACHE_WRITE_MULTIPLIER = 1.25;
 const CACHE_READ_MULTIPLIER = 0.1;

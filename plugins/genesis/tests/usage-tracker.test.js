@@ -37,6 +37,18 @@ test('computeSessionUsage sums input/output/cache tokens across assistant messag
   assert.equal(u.model, 'claude-sonnet-4-5-20250929');
 });
 
+test('computeSessionUsage coerces a non-numeric (string) token count to 0 instead of string-concatenating', () => {
+  const d = tmpConfigDir();
+  const p = writeTranscript(d, [
+    assistantMsg({ input_tokens: '1e9', output_tokens: 10, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }),
+    assistantMsg({ input_tokens: 500, output_tokens: 20, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }),
+  ]);
+  const u = ut.computeSessionUsage(p);
+  assert.equal(u.inputTokens, 500, 'a string input_tokens must coerce to 0, not string-concatenate into the running total');
+  assert.equal(typeof u.inputTokens, 'number');
+  assert.equal(u.outputTokens, 30);
+});
+
 test('computeSessionUsage returns zeros for a missing transcript, does not throw', () => {
   const u = ut.computeSessionUsage('/nonexistent/transcript.jsonl');
   assert.equal(u.turns, 0);
@@ -91,6 +103,18 @@ test('aggregateWeekly keeps only the latest entry per session_id within the wind
   assert.equal(agg.inputTokens, 250);
   assert.equal(agg.outputTokens, 25);
   assert.ok(Math.abs(agg.estUsd - 0.025) < 1e-9);
+});
+
+test('aggregateWeekly excludes a non-numeric token field from that field\'s sum instead of producing NaN/string corruption', () => {
+  const now = 1_800_000_000_000;
+  const entries = [
+    { ts: now - 1000, session_id: 's1', input_tokens: 'not-a-number', output_tokens: 10, cache_creation_tokens: 0, cache_read_tokens: 0, est_usd: 0.01 },
+    { ts: now - 500, session_id: 's2', input_tokens: 200, output_tokens: 20, cache_creation_tokens: 0, cache_read_tokens: 0, est_usd: 0.02 },
+  ];
+  const agg = ut.aggregateWeekly(entries, ut.WEEK_MS, now);
+  assert.equal(agg.inputTokens, 200, 'the malformed s1 entry\'s input_tokens must contribute 0, not NaN/string corruption');
+  assert.equal(typeof agg.inputTokens, 'number');
+  assert.equal(agg.outputTokens, 30);
 });
 
 test('renderLine formats session + weekly with cost when known', () => {

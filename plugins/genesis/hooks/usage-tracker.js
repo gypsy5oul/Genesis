@@ -36,6 +36,17 @@ const MODEL_PRICING = [
 const CACHE_WRITE_MULTIPLIER = 1.25;
 const CACHE_READ_MULTIPLIER = 0.1;
 
+// A malformed/adversarial transcript line or a hand-edited history entry
+// can carry a non-numeric token count (e.g. a string "1e9"). `v || 0`
+// doesn't catch this — a non-empty string is truthy, so `total += "1e9"`
+// silently becomes string concatenation instead of arithmetic, corrupting
+// the running total (and, for transcript data, everything written
+// permanently into the history log from that point on). Coerce anything
+// that isn't a finite number to 0 instead.
+function safeNum(v) {
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
+
 function priceFor(model) {
   if (!model) return null;
   for (const [prefix, input, output] of MODEL_PRICING) {
@@ -67,10 +78,10 @@ function computeSessionUsage(transcriptPath) {
     if (entry.type !== 'assistant' || !entry.message) continue;
     const usage = entry.message.usage;
     if (!usage) continue;
-    inputTokens         += usage.input_tokens || 0;
-    outputTokens        += usage.output_tokens || 0;
-    cacheCreationTokens += usage.cache_creation_input_tokens || 0;
-    cacheReadTokens      += usage.cache_read_input_tokens || 0;
+    inputTokens         += safeNum(usage.input_tokens);
+    outputTokens        += safeNum(usage.output_tokens);
+    cacheCreationTokens += safeNum(usage.cache_creation_input_tokens);
+    cacheReadTokens      += safeNum(usage.cache_read_input_tokens);
     turns++;
     if (!model && entry.message.model) model = entry.message.model;
   }
@@ -128,10 +139,10 @@ function aggregateWeekly(entries, windowMs, nowMs) {
   }
   let inputTokens = 0, outputTokens = 0, cacheCreationTokens = 0, cacheReadTokens = 0, estUsd = 0, hasCost = false;
   for (const e of latestPerSession.values()) {
-    inputTokens += e.input_tokens || 0;
-    outputTokens += e.output_tokens || 0;
-    cacheCreationTokens += e.cache_creation_tokens || 0;
-    cacheReadTokens += e.cache_read_tokens || 0;
+    inputTokens += safeNum(e.input_tokens);
+    outputTokens += safeNum(e.output_tokens);
+    cacheCreationTokens += safeNum(e.cache_creation_tokens);
+    cacheReadTokens += safeNum(e.cache_read_tokens);
     if (typeof e.est_usd === 'number') { estUsd += e.est_usd; hasCost = true; }
   }
   return {
@@ -194,7 +205,7 @@ if (require.main === module) main();
 
 module.exports = {
   computeSessionUsage, priceFor, estimateCost, humanizeTokens, formatUsd,
-  totalTokens, readHistory, aggregateWeekly, renderLine, claudeConfigDir,
+  totalTokens, readHistory, aggregateWeekly, renderLine, claudeConfigDir, safeNum,
   MODEL_PRICING, CACHE_WRITE_MULTIPLIER, CACHE_READ_MULTIPLIER,
   HISTORY_BASENAME, LINE_BASENAME, WEEK_MS,
 };

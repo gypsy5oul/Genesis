@@ -48,11 +48,13 @@ function extractFromTree(rootNode, relFile) {
   }
 
   // Only top-level function/arrow-const declarations and top-level classes'
-  // own methods become graph nodes — a function/arrow nested inside another
-  // function is not separately recorded (avoids same-name collisions across
-  // sibling closures, e.g. two different functions each declaring their own
-  // local `helper`). `insideFunction` tracks whether we're already inside
-  // such a recorded scope.
+  // own methods become graph nodes. `insideFunction` is true once ANY
+  // function-scope-creating node (function_declaration, class_declaration,
+  // lexical_declaration wrapping an arrow/function-expression, or a bare
+  // arrow_function/function_expression — e.g. a callback argument or IIFE)
+  // is an ancestor. This avoids same-name collisions across sibling
+  // closures, however they're nested — named declaration, callback
+  // argument, or IIFE.
   function collectDeclarations(node, insideFunction) {
     let nextInsideFunction = insideFunction;
     if (node.type === 'function_declaration') {
@@ -91,6 +93,15 @@ function extractFromTree(rootNode, relFile) {
         }
       }
       nextInsideFunction = true;
+    } else if (node.type === 'arrow_function' || node.type === 'function_expression') {
+      // Anonymous/inline function bodies (callback arguments, IIFEs) also
+      // establish a new scope, even though this node isn't itself a named
+      // declaration. The named case (`const x = () => {}`, handled above
+      // via lexical_declaration) sets nextInsideFunction here too when the
+      // generic recursion reaches the arrow_function/function_expression
+      // node — redundant with the branch above but harmless, since nothing
+      // is recorded here, only the flag is set.
+      nextInsideFunction = true;
     } else if (node.type === 'import_statement') {
       const sourceNode = node.childForFieldName('source');
       if (sourceNode) {
@@ -102,31 +113,44 @@ function extractFromTree(rootNode, relFile) {
   }
   collectDeclarations(rootNode, false);
 
-  // Mirrors collectDeclarations exactly: only one level of recorded scope
-  // can ever be active, so `scope` is the current recorded scope's node id
-  // (or null at file/top level) rather than a stack. A call made anywhere
-  // inside a nested (unrecorded) closure attributes to the nearest
-  // enclosing recorded scope — never to a scope that was never recorded.
-  function collectCalls(node, scope, currentClassName) {
+  // Mirrors collectDeclarations's insideFunction gating exactly, so a call
+  // is only attributed to a NAMED scope that collectDeclarations actually
+  // recorded — never to a scope that was never recorded (which would be a
+  // dangling reference). `scope` (the nearest enclosing recorded scope's
+  // node id, or null) is tracked separately from `insideFunction` because
+  // a call inside an anonymous callback (which sets insideFunction=true but
+  // has no name of its own) must still attribute to the nearest enclosing
+  // NAMED scope, not to nothing.
+  function collectCalls(node, insideFunction, scope, currentClassName) {
+    let nextInsideFunction = insideFunction;
     let nextScope = scope;
     let nextClassName = currentClassName;
     if (node.type === 'class_declaration') {
-      if (scope === null) {
+      if (!insideFunction) {
         const nameNode = node.childForFieldName('name');
         nextClassName = nameNode ? nameNode.text : currentClassName;
       }
+      // Deliberately do NOT set nextInsideFunction here — unlike
+      // collectDeclarations (which records a class's methods via an
+      // explicit loop, independent of insideFunction propagation),
+      // collectCalls relies on reaching method_definition via the generic
+      // recursion below with insideFunction still false, so each method
+      // can create its own scope. method_definition sets nextInsideFunction
+      // itself once its own body is entered.
     } else if (node.type === 'function_declaration') {
-      if (scope === null) {
+      if (!insideFunction) {
         const nameNode = node.childForFieldName('name');
         if (nameNode) nextScope = nodeId(nameNode.text);
       }
+      nextInsideFunction = true;
     } else if (node.type === 'method_definition') {
-      if (scope === null) {
+      if (!insideFunction) {
         const nameNode = node.childForFieldName('name');
         if (nameNode && currentClassName) nextScope = nodeId(`${currentClassName}.${nameNode.text}`);
       }
+      nextInsideFunction = true;
     } else if (node.type === 'lexical_declaration') {
-      if (scope === null) {
+      if (!insideFunction) {
         for (const decl of node.namedChildren) {
           if (decl.type !== 'variable_declarator') continue;
           const nameNode = decl.childForFieldName('name');
@@ -136,6 +160,9 @@ function extractFromTree(rootNode, relFile) {
           }
         }
       }
+      nextInsideFunction = true;
+    } else if (node.type === 'arrow_function' || node.type === 'function_expression') {
+      nextInsideFunction = true;
     }
     if (node.type === 'call_expression') {
       const fn = node.childForFieldName('function');
@@ -150,9 +177,9 @@ function extractFromTree(rootNode, relFile) {
         edges.push({ from, to: nodeId(calleeName), kind: 'calls' });
       }
     }
-    for (const child of node.namedChildren) collectCalls(child, nextScope, nextClassName);
+    for (const child of node.namedChildren) collectCalls(child, nextInsideFunction, nextScope, nextClassName);
   }
-  collectCalls(rootNode, null, null);
+  collectCalls(rootNode, false, null, null);
 
   return { nodes, edges };
 }

@@ -109,3 +109,27 @@ test('extractFromTree attributes a call made inside a nested arrow function to t
   assert.deepEqual(nodes.map(n => n.name).sort(), ['inner', 'outer']);
   assert.deepEqual(edges, [{ from: 'src/f.js#outer', to: 'src/f.js#inner', kind: 'calls' }]);
 });
+
+test('extractFromTree does not record a function nested inside a callback argument as a separate node (avoids same-name collisions across .map() callbacks)', () => {
+  const root = parseJs(
+    'arr.map(x => { function helper() { return 1; } return helper(); });\n' +
+    'arr2.map(x => { function helper() { return 2; } return helper(); });\n'
+  );
+  const { nodes, edges } = gp.extractFromTree(root, 'src/g.js');
+  assert.equal(nodes.length, 0, 'no top-level declarations exist in this snippet');
+  assert.equal(edges.filter(e => e.kind === 'calls').length, 0, 'calls to an unrecorded nested helper produce no edge');
+});
+
+test('extractFromTree does not record a function nested inside an IIFE as a top-level node', () => {
+  const root = parseJs('(function () {\n  function inner() { return 1; }\n  return inner();\n})();\n');
+  const { nodes } = gp.extractFromTree(root, 'src/h.js');
+  assert.equal(nodes.length, 0, 'inner is nested inside the IIFE, not top-level');
+});
+
+test('extractFromTree attributes a call inside an anonymous callback to the nearest enclosing named function', () => {
+  const root = parseJs(
+    'function outer() {\n  arr.forEach(x => {\n    return inner();\n  });\n}\nfunction inner(){return 1;}\n'
+  );
+  const { edges } = gp.extractFromTree(root, 'src/i.js');
+  assert.deepEqual(edges, [{ from: 'src/i.js#outer', to: 'src/i.js#inner', kind: 'calls' }]);
+});

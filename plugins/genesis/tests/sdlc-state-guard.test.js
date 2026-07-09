@@ -79,9 +79,36 @@ test('guard: allows edits to files other than state.json even if they mention "a
   assert.equal(deny(r), null);
 });
 
-test('guard: allows non-Edit/Write/MultiEdit tools untouched', () => {
+test('guard: allows non-Edit/Write/MultiEdit/Bash tools untouched', () => {
   const d = tmpProject();
-  const r = runGuard({ cwd: d, tool_name: 'Bash', tool_input: { command: 'echo "status": "approved" >> ' + lib.statePath(d) } });
+  const r = runGuard({ cwd: d, tool_name: 'SomeOtherTool', tool_input: { command: 'echo "status": "approved" >> ' + lib.statePath(d) } });
+  assert.equal(r.status, 0);
+  assert.equal(deny(r), null);
+});
+
+test('guard: denies a Bash sed -i command that mentions state.json and approved (write heuristic)', () => {
+  const d = tmpProject();
+  const r = runGuard({
+    cwd: d, tool_name: 'Bash',
+    tool_input: { command: "sed -i 's/awaiting-approval/approved/' docs/sdlc/state.json" }
+  });
+  assert.equal(r.status, 0);
+  assert.ok(deny(r), 'expected a deny decision');
+});
+
+test('guard: allows a read-only Bash command that references state.json and approved (no false positive)', () => {
+  const d = tmpProject();
+  const r = runGuard({
+    cwd: d, tool_name: 'Bash',
+    tool_input: { command: 'grep approved docs/sdlc/state.json' }
+  });
+  assert.equal(r.status, 0);
+  assert.equal(deny(r), null);
+});
+
+test('guard: allows a Bash command unrelated to state.json', () => {
+  const d = tmpProject();
+  const r = runGuard({ cwd: d, tool_name: 'Bash', tool_input: { command: 'npm test' } });
   assert.equal(r.status, 0);
   assert.equal(deny(r), null);
 });

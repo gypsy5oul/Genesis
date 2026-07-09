@@ -27,14 +27,32 @@ function readGraph(cwd) {
   }
 }
 
-function writeGraph(cwd, graph) {
+function writeGraphUnlocked(cwd, graph) {
   const json = JSON.stringify(graph, null, 2) + '\n';
   if (Buffer.byteLength(json) > MAX_GRAPH_BYTES) {
     throw new Error(`graph exceeds ${MAX_GRAPH_BYTES}-byte cap (${Buffer.byteLength(json)} bytes) — not written`);
   }
-  withLock(graphPath(cwd) + '.lock', () => {
-    writeFileSafe(cwd, graphPath(cwd), json, { backup: false });
+  writeFileSafe(cwd, graphPath(cwd), json, { backup: false });
+}
+
+function writeGraph(cwd, graph) {
+  withLock(graphPath(cwd) + '.lock', () => writeGraphUnlocked(cwd, graph));
+}
+
+// Read-modify-write under a single lock acquisition — readGraph()+writeGraph()
+// called separately (as indexFile() originally did) leaves a window where a
+// second process reads the same pre-mutation graph and its write clobbers the
+// first's update (a lost update, the same class of bug approveStage's own
+// read-mutate-write in sdlc-state.js guards against with a single withLock).
+// `mutator(graph)` returns `{graph: <new graph to persist>, result: <value
+// mutateGraph returns to its caller>}`.
+function mutateGraph(cwd, mutator) {
+  return withLock(graphPath(cwd) + '.lock', () => {
+    const graph = readGraph(cwd);
+    const { graph: nextGraph, result } = mutator(graph);
+    writeGraphUnlocked(cwd, nextGraph);
+    return result;
   });
 }
 
-module.exports = { graphPath, emptyGraph, readGraph, writeGraph, MAX_GRAPH_BYTES, MAX_FILE_BYTES };
+module.exports = { graphPath, emptyGraph, readGraph, writeGraph, mutateGraph, MAX_GRAPH_BYTES, MAX_FILE_BYTES };

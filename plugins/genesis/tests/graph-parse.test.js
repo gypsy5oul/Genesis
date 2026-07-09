@@ -224,3 +224,16 @@ test('extractFromTree never resolves any member-expression call (obj.m()), even 
   const { edges } = gp.extractFromTree(root, 'src/s.js');
   assert.equal(edges.filter(e => e.kind === 'calls').length, 0, 'obj.f() must not resolve, per the documented method-target-call limitation');
 });
+
+test('extractFromTree records a TypeScript abstract class and its concrete methods', () => {
+  const root = parseTs('abstract class C {\n  abstract foo(): void;\n  bar() { return 1; }\n}\n');
+  const { nodes } = gp.extractFromTree(root, 'src/t.ts');
+  const ids = nodes.map(n => n.id).sort();
+  assert.deepEqual(ids, ['src/t.ts#C', 'src/t.ts#C.bar']);
+});
+
+test('extractFromTree does not record a function nested inside an abstract class method as top-level', () => {
+  const root = parseTs('abstract class C {\n  bar() { function helper(){ return 1; } return helper(); }\n}\n');
+  const { nodes } = gp.extractFromTree(root, 'src/u.ts');
+  assert.ok(!nodes.map(n => n.name).includes('helper'));
+});

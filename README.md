@@ -79,7 +79,7 @@ Development fans out across disjoint file sets — architect breaks the design i
 ## Development
 
 ```
-npm test                                            # 56 unit tests (hooks + state + workflow decision logic)
+npm test                                            # unit tests: hooks, state, workflow decision logic, code graph
 npm run validate                                    # structural validation
 npm run smoke                                       # deterministic-layer smoke test
 ```

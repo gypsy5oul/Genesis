@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 const path = require('path');
-const { readGraph, writeGraph } = require('./graph-store');
+const { mutateGraph } = require('./graph-store');
 const { parseFile } = require('./graph-parse');
 
 function toRel(cwd, absFile) {
@@ -24,18 +24,18 @@ function indexFile(cwd, absFile) {
     return { ok: false, msg: `${absFile} is outside the project` };
   }
   try {
-    let graph = pruneFile(readGraph(cwd), relFile);
-    const parsed = parseFile(absFile, relFile);
-    if (!parsed) {
-      graph.skipped.push(relFile);
-      writeGraph(cwd, graph);
-      return { ok: true, updated: false };
-    }
-    graph.nodes.push(...parsed.nodes);
-    graph.edges.push(...parsed.edges);
-    graph.files[relFile] = { lang: parsed.lang, hash: parsed.hash };
-    writeGraph(cwd, graph);
-    return { ok: true, updated: true };
+    return mutateGraph(cwd, (graph) => {
+      const next = pruneFile(graph, relFile);
+      const parsed = parseFile(absFile, relFile);
+      if (!parsed) {
+        next.skipped.push(relFile);
+        return { graph: next, result: { ok: true, updated: false } };
+      }
+      next.nodes.push(...parsed.nodes);
+      next.edges.push(...parsed.edges);
+      next.files[relFile] = { lang: parsed.lang, hash: parsed.hash };
+      return { graph: next, result: { ok: true, updated: true } };
+    });
   } catch (e) {
     return { ok: false, msg: e.message };
   }

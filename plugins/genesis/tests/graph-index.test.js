@@ -123,3 +123,24 @@ test('indexFile re-indexing the TARGET of a cross-file import does not delete th
   const g = store.readGraph(d);
   assert.deepEqual(g.edges, [{ from: 'src/a.js', to: 'src/b.js', kind: 'imports' }]);
 });
+
+test('indexFile is safe under real concurrent processes indexing different files (mutateGraph atomicity, no lost update)', async () => {
+  const d = tmpProject();
+  writeSrc(d, 'src/a.js', 'function f(){}\n');
+  writeSrc(d, 'src/b.js', 'function g(){}\n');
+  const { spawn } = require('child_process');
+  const hookPath = path.join(__dirname, '..', 'hooks', 'graph-index.js');
+  function indexInChildProcess(relPath) {
+    return new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, [hookPath, '--file', relPath, '--cwd', d]);
+      let stderr = '';
+      child.stderr.on('data', c => { stderr += c; });
+      child.on('exit', code => code === 0 ? resolve() : reject(new Error('child exited ' + code + ': ' + stderr)));
+      child.on('error', reject);
+    });
+  }
+  await Promise.all([indexInChildProcess('src/a.js'), indexInChildProcess('src/b.js')]);
+  const g = store.readGraph(d);
+  const names = g.nodes.map(n => n.name).sort();
+  assert.deepEqual(names, ['f', 'g'], 'both files must be indexed — a non-atomic read-modify-write would lose one');
+});

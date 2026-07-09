@@ -90,7 +90,15 @@ function extractFromTree(rootNode, relFile) {
     let nextClassName = className;
 
     switch (node.type) {
-      case 'class_declaration': {
+      case 'class_declaration':
+      case 'abstract_class_declaration': {
+        // abstract_class_declaration (TS `abstract class`) is a distinct
+        // grammar node from class_declaration but has an identical shape
+        // (name/body fields, class_body of method_definition members) —
+        // verified via direct parse. Bodyless abstract_method_signature
+        // members are silently skipped by the method-recording loop below
+        // (not a method_definition), same as any other bodyless
+        // declaration (function_signature, interface members, etc.).
         if (!insideFunction) {
           const nameNode = node.childForFieldName('name');
           const thisClassName = nameNode ? nameNode.text : null;

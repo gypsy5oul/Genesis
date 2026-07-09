@@ -25,7 +25,19 @@ function runHook(script, payload) {
 }
 
 test('session-start: silent + exit 0 without state', () => {
-  const r = runHook('sdlc-session-start.js', { cwd: tmpProject(null) });
+  // Pinned to an isolated CLAUDE_CONFIG_DIR whose settings.json already
+  // points at genesis's own usage-statusline.sh: the statusline nudge added
+  // in Task 3 fires unconditionally (independent of SDLC state) whenever the
+  // statusline is unset or set to something else, so without this override
+  // the test would depend on whatever statusLine happens to be configured on
+  // the machine running it. Assertions are unchanged from before Task 3.
+  const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'genesis-cfg-'));
+  fs.writeFileSync(path.join(configDir, 'settings.json'), JSON.stringify({ statusLine: { command: 'bash /some/path/usage-statusline.sh' } }));
+  const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'hooks', 'sdlc-session-start.js')], {
+    input: JSON.stringify({ cwd: tmpProject(null) }),
+    encoding: 'utf8', timeout: 5000,
+    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir }
+  });
   assert.equal(r.status, 0);
   assert.equal(r.stdout, '');
 });
@@ -38,6 +50,41 @@ test('session-start: injects summary with state', () => {
 test('session-start: exit 0 on garbage stdin', () => {
   const r = runHook('sdlc-session-start.js', 'not json at all');
   assert.equal(r.status, 0);
+});
+test('session-start: nudges to set up the statusline when unset', () => {
+  const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'genesis-cfg-'));
+  const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'hooks', 'sdlc-session-start.js')], {
+    input: JSON.stringify({ cwd: tmpProject(null) }),
+    encoding: 'utf8', timeout: 5000,
+    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir }
+  });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /offer to set it up/);
+});
+test('session-start: silent about statusline when already set to genesis\'s own script', () => {
+  const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'genesis-cfg-'));
+  fs.writeFileSync(path.join(configDir, 'settings.json'), JSON.stringify({ statusLine: { command: 'bash /some/path/usage-statusline.sh' } }));
+  const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'hooks', 'sdlc-session-start.js')], {
+    input: JSON.stringify({ cwd: tmpProject(null) }),
+    encoding: 'utf8', timeout: 5000,
+    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir }
+  });
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout.trim(), '');
+});
+test('session-start: warns before replacing a different existing statusline, never overwrites', () => {
+  const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'genesis-cfg-'));
+  fs.writeFileSync(path.join(configDir, 'settings.json'), JSON.stringify({ statusLine: { command: 'bash /other/caveman-statusline.sh' } }));
+  const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'hooks', 'sdlc-session-start.js')], {
+    input: JSON.stringify({ cwd: tmpProject(null) }),
+    encoding: 'utf8', timeout: 5000,
+    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir }
+  });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /different command/);
+  assert.match(r.stdout, /caveman-statusline\.sh/);
+  const settingsAfter = JSON.parse(fs.readFileSync(path.join(configDir, 'settings.json'), 'utf8'));
+  assert.equal(settingsAfter.statusLine.command, 'bash /other/caveman-statusline.sh');
 });
 test('prompt: blocks /genesis:status with rendered board', () => {
   const out = JSON.parse(runHook('sdlc-prompt-hook.js', { cwd: tmpProject(base()), prompt: '/genesis:status' }).stdout);

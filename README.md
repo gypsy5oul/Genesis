@@ -75,6 +75,7 @@ Development fans out across disjoint file sets — architect breaks the design i
 - Monitoring loops are read-only; anomalies become triage notes, never automatic production changes.
 - Security findings and destructive-operation instructions are always written in full plain English.
 - State file reads are size-capped, symlink-safe, and sanitized before entering model context.
+- The statusline (opt-in, `~/.claude/settings.json`) shows live session + rolling-7-day token usage and an estimated USD cost — a SessionStart nudge offers setup once, and Genesis never overwrites an existing statusline without asking.
 
 ## Development
 

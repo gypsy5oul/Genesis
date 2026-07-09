@@ -13,7 +13,7 @@ function pruneFile(graph, relFile) {
   return {
     ...graph,
     nodes: graph.nodes.filter(n => n.file !== relFile),
-    edges: graph.edges.filter(e => !(scoped(e.from) || scoped(e.to))),
+    edges: graph.edges.filter(e => !scoped(e.from)),
     skipped: graph.skipped.filter(s => s !== relFile)
   };
 }

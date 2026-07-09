@@ -113,3 +113,13 @@ test('hook mode exits 0 on garbage stdin', () => {
   const r = runCli([], 'not json');
   assert.equal(r.status, 0);
 });
+
+test('indexFile re-indexing the TARGET of a cross-file import does not delete the importing file\'s edge', () => {
+  const d = tmpProject();
+  const a = writeSrc(d, 'src/a.js', "import './b.js';\nfunction f(){}\n");
+  const b = writeSrc(d, 'src/b.js', 'function g(){}\n');
+  idx.indexFile(d, a);
+  idx.indexFile(d, b);
+  const g = store.readGraph(d);
+  assert.deepEqual(g.edges, [{ from: 'src/a.js', to: 'src/b.js', kind: 'imports' }]);
+});

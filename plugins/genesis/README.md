@@ -1,12 +1,12 @@
 # Genesis
 
-**From idea to production — your AI software company.**
+**Build production-ready software in Claude Code — from idea to deployment, one reviewed stage at a time.**
 
-Virtual software company for Claude Code: a gated 10-stage SDLC driven by 11 role agents. Opus thinks, sonnet builds and reviews, haiku does chores, scripts do everything deterministic for $0.
+A gated 10-stage software lifecycle for developing real applications: 11 specialized role agents draft, adversarially review, and fix every artifact and every code change; you approve each stage before the next begins. Opus thinks, sonnet builds and reviews, haiku does chores, scripts do everything deterministic for $0.
 
 ## Install
 
-/plugin marketplace add <this-repo-url>
+/plugin marketplace add https://github.com/gypsy5oul/Genesis
 /plugin install genesis@claude-skills
 
 Local dev: clone this repo, run Claude Code with `--plugin-dir /opt/claude-skills/plugins/genesis`.

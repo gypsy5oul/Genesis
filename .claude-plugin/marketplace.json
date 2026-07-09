@@ -5,7 +5,7 @@
     {
       "name": "genesis",
       "source": "./plugins/genesis",
-      "description": "From idea to production — your AI software company. Gated 10-stage SDLC driven by role agents (opus architect / sonnet senior / haiku junior).",
+      "description": "Build production-ready software from idea to deployment: gated 10-stage SDLC, adversarial reviews on every artifact, role agents tiered opus/sonnet/haiku.",
       "version": "0.1.0"
     }
   ]

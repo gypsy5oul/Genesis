@@ -45,6 +45,8 @@ Never invent a location the query didn't return.
   specifiers (`./b`) are resolved against the real filesystem — exact match,
   then `.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs`, then `/index.*` — and dropped
   entirely if no candidate exists on disk (silence, not a wrong answer).
+  Only ES `import` statements are recognized — re-exports (`export ... from
+  './x'`) and CommonJS `require('./x')` produce no edge (silence, not wrong).
 - `calls` edges: same-file only, and only to a plain top-level
   function/const-arrow referenced by its bare name. Method-target calls
   (`obj.m()`, `this.m()`) are never resolved, even within the same file

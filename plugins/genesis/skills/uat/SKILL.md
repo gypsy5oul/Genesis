@@ -1,6 +1,6 @@
 ---
 name: uat
-description: SDLC stage 7 — user acceptance testing. Product-manager + qa-engineer walk every acceptance criterion against the built system, produce docs/sdlc/07-uat.md with a traceability matrix. Use on /genesis:uat.
+description: SDLC stage 7 — user acceptance testing. Product-manager + qa-engineer walk every acceptance criterion against the built system, produce docs/sdlc/07-uat.md with a traceability matrix. Use on /genesis:uat. Also use when the user says "acceptance testing", "UAT", "does it meet the requirements", or asks for final sign-off checks.
 ---
 
 # Stage 7: UAT

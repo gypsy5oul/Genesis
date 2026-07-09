@@ -1,6 +1,6 @@
 ---
 name: feasibility
-description: SDLC stage 2 — feasibility study. BA + solution-architect + devops-engineer assess technical/cost/risk, produce docs/sdlc/02-feasibility.md with go/no-go. Use on /genesis:feasibility.
+description: SDLC stage 2 — feasibility study. BA + solution-architect + devops-engineer assess technical/cost/risk, produce docs/sdlc/02-feasibility.md with go/no-go. Use on /genesis:feasibility. Also use when the user says "is this feasible", "feasibility study", "go or no-go", or asks whether the idea is worth building.
 ---
 
 # Stage 2: Feasibility Study

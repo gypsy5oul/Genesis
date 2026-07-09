@@ -30,9 +30,11 @@ const results = await pipeline(
   async (result, m) => {
     const blocking = (result?.defects || []).filter(d => d.severity === 'Critical' || d.severity === 'Required')
     if (!blocking.length) return { module: m.name, ...result, fixedRound: false }
-    await agent(
-      `Fix product defects in module "${m.name}" (paths: ${m.paths.join(', ')}). Each has a failing test proving it — make them pass without weakening the tests:\n${blocking.map(d => `${d.severity} | ${d.location} | ${d.problem} | test: ${d.failingTest}`).join('\n')}\nRead docs/sdlc/04-design.md first — ADRs binding. Builder report back.`,
-      { label: `fix:${m.name}`, phase: 'Fix', agentType: m.discipline || 'backend-dev' })
+    const fixPrompt = `Fix product defects in module "${m.name}" (paths: ${m.paths.join(', ')}). Each has a failing test proving it — make them pass without weakening the tests:\n${blocking.map(d => `${d.severity} | ${d.location} | ${d.problem} | test: ${d.failingTest}`).join('\n')}\nRead docs/sdlc/04-design.md first — ADRs binding. Builder report back.`
+    let fixResult = await agent(fixPrompt, { label: `fix:${m.name}`, phase: 'Fix', agentType: m.discipline || 'backend-dev' })
+    if (!fixResult) {
+      fixResult = await agent(fixPrompt, { label: `fix:${m.name}`, phase: 'Fix', agentType: m.discipline || 'backend-dev', model: 'opus' })
+    }
     const verify = await agent(
       `Re-run tests for module "${m.name}" with: ${m.testCommand}. Report pass/fail counts and remaining defects.`,
       { label: `verify:${m.name}`, phase: 'Verify', agentType: 'qa-engineer', schema: RESULT })

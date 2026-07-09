@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const STAGES = ['requirements','feasibility','plan','design','develop','test','uat','deploy','monitor','maintain'];
+const STATUSES = ['pending','in-progress','awaiting-approval','approved'];
 const MAX_STATE_BYTES = 262144;
 
 function statePath(cwd) { return path.join(cwd, 'docs', 'sdlc', 'state.json'); }
@@ -14,6 +15,10 @@ function readState(cwd) {
     if (st.isSymbolicLink() || !st.isFile() || st.size > MAX_STATE_BYTES) return null;
     const data = JSON.parse(fs.readFileSync(p, 'utf8'));
     if (!data || typeof data !== 'object' || typeof data.project !== 'string' || typeof data.stages !== 'object') return null;
+    for (const k of Object.keys(data.stages)) {
+      const entry = data.stages[k];
+      if (entry && entry.status !== undefined && !STATUSES.includes(entry.status)) return null;
+    }
     return data;
   } catch { return null; }
 }
@@ -21,6 +26,9 @@ function readState(cwd) {
 function writeState(cwd, state) {
   const p = statePath(cwd);
   fs.mkdirSync(path.dirname(p), { recursive: true });
+  if (fs.existsSync(p)) {
+    try { fs.copyFileSync(p, p + '.bak'); } catch { /* backup failure must not block the write */ }
+  }
   const tmp = p + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n');
   fs.renameSync(tmp, p);
@@ -96,6 +104,6 @@ function approveStage(cwd, stage) {
 }
 
 module.exports = {
-  STAGES, MAX_STATE_BYTES, statePath, readState, writeState, stageEntry, clean,
+  STAGES, STATUSES, MAX_STATE_BYTES, statePath, readState, writeState, stageEntry, clean,
   pendingGate, priorStage, nextStage, summaryLine, renderStatus, approveStage
 };

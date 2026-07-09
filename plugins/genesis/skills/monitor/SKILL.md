@@ -1,6 +1,6 @@
 ---
 name: monitor
-description: SDLC stage 9 — production monitoring. SRE generates monitoring config + runbooks; a read-only self-paced loop watches health endpoints/logs the user points at. Produces docs/sdlc/09-monitoring.md. Use on /genesis:monitor.
+description: SDLC stage 9 — production monitoring. SRE generates monitoring config + runbooks; a read-only self-paced loop watches health endpoints/logs the user points at. Produces docs/sdlc/09-monitoring.md. Use on /genesis:monitor. Also use when the user says "set up monitoring", "watch production", "alerting", "runbooks", or asks to observe the deployed app.
 ---
 
 # Stage 9: Production Monitoring

@@ -15,6 +15,7 @@ Read `../_shared/gate-protocol.md` first.
 
 ```json
 {
+  "version": 1,
   "project": "<name>",
   "idea": "<one-liner>",
   "createdAt": "<ISO date>",

@@ -1,6 +1,6 @@
 ---
 name: design
-description: SDLC stage 4 — system design. Solution-architect + security-reviewer produce docs/sdlc/04-design.md (architecture, data model, API contracts, numbered ADRs). Optional --panel flag runs a 3-proposal judge panel. Use on /genesis:design.
+description: SDLC stage 4 — system design. Solution-architect + security-reviewer produce docs/sdlc/04-design.md (architecture, data model, API contracts, numbered ADRs). Optional --panel flag runs a 3-proposal judge panel. Use on /genesis:design. Also use when the user says "design the system", "architecture", "ADRs", "API contracts", or asks how the app should be structured.
 ---
 
 # Stage 4: System Design

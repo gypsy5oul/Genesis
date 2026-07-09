@@ -35,9 +35,11 @@ const results = await pipeline(
   async (acc, t) => {
     const blocking = (acc.review?.findings || []).filter(f => f.severity === 'Critical' || f.severity === 'Required')
     if (!blocking.length) return { id: t.id, report: acc.report, findings: acc.review?.findings || [], fixed: true }
-    const fixReport = await agent(
-      `Fix these review findings on task ${t.id}. Touch only: ${t.files.join(', ')}. Findings:\n${blocking.map(f => `${f.severity} | ${f.location} | ${f.problem} | ${f.fix}`).join('\n')}\nRe-run tests. Builder report back.`,
-      { label: `fix:${t.id}`, phase: 'Fix', agentType: t.discipline })
+    const fixPrompt = `Fix these review findings on task ${t.id}. Touch only: ${t.files.join(', ')}. Findings:\n${blocking.map(f => `${f.severity} | ${f.location} | ${f.problem} | ${f.fix}`).join('\n')}\nRe-run tests. Builder report back.`
+    let fixReport = await agent(fixPrompt, { label: `fix:${t.id}`, phase: 'Fix', agentType: t.discipline })
+    if (!fixReport) {
+      fixReport = await agent(fixPrompt, { label: `fix:${t.id}`, phase: 'Fix', agentType: t.discipline, model: 'opus' })
+    }
     return { id: t.id, report: fixReport, findings: acc.review?.findings || [], fixed: Boolean(fixReport) }
   }
 )

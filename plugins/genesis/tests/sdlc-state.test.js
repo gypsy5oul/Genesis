@@ -48,6 +48,29 @@ test('writeState then readState round-trips', () => {
   lib.writeState(d, base());
   assert.equal(lib.readState(d).idea, 'url shortener');
 });
+test('writeState does not create a .bak file on first write', () => {
+  const d = tmpProject(null);
+  lib.writeState(d, base());
+  assert.equal(fs.existsSync(lib.statePath(d) + '.bak'), false);
+});
+test('writeState creates a .bak of the prior state when overwriting', () => {
+  const d = tmpProject(null);
+  const first = base();
+  lib.writeState(d, first);
+  const second = base();
+  second.idea = 'pastebin';
+  lib.writeState(d, second);
+  const bakPath = lib.statePath(d) + '.bak';
+  assert.equal(fs.existsSync(bakPath), true);
+  const bak = JSON.parse(fs.readFileSync(bakPath, 'utf8'));
+  assert.equal(bak.idea, 'url shortener');
+  assert.equal(lib.readState(d).idea, 'pastebin');
+});
+test('readState returns null when a stage has status "bogus"', () => {
+  const st = base();
+  st.stages.requirements.status = 'bogus';
+  assert.equal(lib.readState(tmpProject(st)), null);
+});
 test('pendingGate finds awaiting stage', () => {
   assert.equal(lib.pendingGate(base()), 'requirements');
 });

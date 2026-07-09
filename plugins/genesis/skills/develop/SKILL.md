@@ -1,6 +1,6 @@
 ---
 name: develop
-description: SDLC stage 5 — development. Solution-architect breaks the design into disjoint tasks; dev agents build in parallel via workflow; code-reviewer gates each task. Use on /genesis:develop.
+description: SDLC stage 5 — development. Solution-architect breaks the design into disjoint tasks; dev agents build in parallel via workflow; code-reviewer gates each task. Use on /genesis:develop. Also use when the user says "start building", "implement the design", "write the code", or asks to begin development.
 ---
 
 # Stage 5: Development
@@ -12,7 +12,7 @@ Follow `../_shared/gate-protocol.md`, `../_shared/review-loop.md`, `../_shared/o
 ## Playbook
 1. Gate entry; mark `in-progress`. Verify clean git baseline in the target repo (uncommitted changes → ask user first).
 2. **Breakdown** — spawn `solution-architect` with design + plan paths: emit the task list as JSON per the planner contract. Validate yourself ($0 tier): file sets disjoint, every backlog task covered, complexity ∈ low|medium|high. Invalid → one retry with the errors quoted, then surface to user.
-3. **Build** — run Workflow with scriptPath `<this skill's base dir>/../../workflows/develop.js`, args `{tasks, specPath: "docs/sdlc/01-requirements.md", adrPath: "docs/sdlc/04-design.md"}`. Cost note to user first: roughly one sonnet builder + one sonnet review per task. On launch, immediately write the returned run id to `stages.develop.runId` in state.json. Workflow interrupted → resume by re-invoking Workflow with the same scriptPath and `resumeFromRunId` set to that stored `stages.develop.runId`; completed tasks return cached.
+3. **Build** — run Workflow with scriptPath `<this skill's base dir>/../../workflows/develop.js`, args `{tasks, specPath: "docs/sdlc/01-requirements.md", adrPath: "docs/sdlc/04-design.md"}`. Cost note to user first: roughly one sonnet builder + one sonnet review per task. On launch, immediately write the returned run id to `stages.develop.runId` in state.json. Workflow interrupted → resume by re-invoking Workflow with the same scriptPath and `resumeFromRunId` set to that stored `stages.develop.runId`; completed tasks return cached. Builder spawn prompts must state the project's tech stack from the design ADRs (e.g. "this project is Next.js + Tailwind — apply that stack's idioms").
 4. **Integrate** — after workflow returns: run the full project test suite yourself in the main session. Failures → route to the owning discipline agent (max 2 rounds), then surface.
 5. **Commit** — one commit per completed task where the workflow hasn't already; conventional messages.
 6. Write `05-development.md`: task table (id, title, files, review verdict, test evidence), unresolved findings, deviations from design (each needs an ADR note).

@@ -1,6 +1,6 @@
 ---
 name: test
-description: SDLC stage 6 — testing. QA-engineer team writes and runs the test suite per module via workflow; devs fix defects. Produces docs/sdlc/06-testing.md. Use on /genesis:test.
+description: SDLC stage 6 — testing. QA-engineer team writes and runs the test suite per module via workflow; devs fix defects. Produces docs/sdlc/06-testing.md. Use on /genesis:test. Also use when the user says "run the tests", "write tests", "QA this", or asks to verify the built code.
 ---
 
 # Stage 6: Testing

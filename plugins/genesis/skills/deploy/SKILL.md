@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: SDLC stage 8 — deployment. Devops-engineer generates pipeline, manifests, rollback plan; execution is guided and permission-gated in the main session. Produces docs/sdlc/08-deployment.md. Use on /genesis:deploy.
+description: SDLC stage 8 — deployment. Devops-engineer generates pipeline, manifests, rollback plan; execution is guided and permission-gated in the main session. Produces docs/sdlc/08-deployment.md. Use on /genesis:deploy. Also use when the user says "deploy this", "ship it", "set up CI/CD", "create the Dockerfile", or asks to release the app.
 ---
 
 # Stage 8: Deployment

@@ -1,6 +1,6 @@
 ---
 name: maintain
-description: SDLC stage 10 — maintenance and enhancements. Triage incoming issues/requests, route to dev/qa/devops agents, log every change in docs/sdlc/10-maintenance.md. Use on /genesis:maintain.
+description: SDLC stage 10 — maintenance and enhancements. Triage incoming issues/requests, route to dev/qa/devops agents, log every change in docs/sdlc/10-maintenance.md. Use on /genesis:maintain. Also use when the user says "fix this bug", "add an enhancement", "triage this issue" on a project with completed SDLC stages.
 ---
 
 # Stage 10: Maintenance & Enhancements

@@ -1,6 +1,6 @@
 ---
 name: requirements
-description: SDLC stage 1 — requirement gathering. Business-analyst + product-manager produce docs/sdlc/01-requirements.md (BRD, user stories, MoSCoW). Use on /genesis:requirements.
+description: SDLC stage 1 — requirement gathering. Business-analyst + product-manager produce docs/sdlc/01-requirements.md (BRD, user stories, MoSCoW). Use on /genesis:requirements. Also use when the user says "gather requirements", "write user stories", "start stage 1", or asks to define what the app should do.
 ---
 
 # Stage 1: Requirement Gathering

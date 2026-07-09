@@ -1,6 +1,6 @@
 ---
 name: status
-description: Show the SDLC stage board. Normally intercepted by the plugin's zero-token hook; this skill is the fallback when hooks are disabled. Use when the user runs /genesis:status and no hook answered.
+description: Show the SDLC stage board. Normally intercepted by the plugin's zero-token hook; this skill is the fallback when hooks are disabled. Use when the user runs /genesis:status and no hook answered. Also use when the user asks "where are we", "what stage are we on", or "show SDLC progress" and the hook did not answer.
 ---
 
 # SDLC Status (fallback)

@@ -1,6 +1,6 @@
 ---
 name: plan
-description: SDLC stage 3 — project planning. Product-manager turns approved requirements + feasibility into docs/sdlc/03-plan.md (milestones, backlog, estimates). Use on /genesis:plan.
+description: SDLC stage 3 — project planning. Product-manager turns approved requirements + feasibility into docs/sdlc/03-plan.md (milestones, backlog, estimates). Use on /genesis:plan. Also use when the user says "project plan", "create the backlog", "break this into milestones", or asks how the build will be sequenced.
 ---
 
 # Stage 3: Project Planning

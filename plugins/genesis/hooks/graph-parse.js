@@ -47,38 +47,50 @@ function extractFromTree(rootNode, relFile) {
     declaredNames.add(name);
   }
 
-  function collectDeclarations(node) {
+  // Only top-level function/arrow-const declarations and top-level classes'
+  // own methods become graph nodes — a function/arrow nested inside another
+  // function is not separately recorded (avoids same-name collisions across
+  // sibling closures, e.g. two different functions each declaring their own
+  // local `helper`). `insideFunction` tracks whether we're already inside
+  // such a recorded scope.
+  function collectDeclarations(node, insideFunction) {
+    let nextInsideFunction = insideFunction;
     if (node.type === 'function_declaration') {
       const nameNode = node.childForFieldName('name');
-      if (nameNode) addFunctionNode(nameNode.text, node.startPosition.row, node.endPosition.row);
+      if (nameNode && !insideFunction) addFunctionNode(nameNode.text, node.startPosition.row, node.endPosition.row);
+      nextInsideFunction = true;
     } else if (node.type === 'class_declaration') {
-      const nameNode = node.childForFieldName('name');
-      const className = nameNode ? nameNode.text : null;
-      if (className) {
-        nodes.push({
-          id: nodeId(className), kind: 'class', name: className, file: relFile,
-          lines: [node.startPosition.row + 1, node.endPosition.row + 1]
-        });
-        declaredNames.add(className);
-        const body = node.childForFieldName('body');
-        if (body) {
-          for (const member of body.namedChildren) {
-            if (member.type === 'method_definition') {
-              const methodName = member.childForFieldName('name');
-              if (methodName) addFunctionNode(`${className}.${methodName.text}`, member.startPosition.row, member.endPosition.row);
+      if (!insideFunction) {
+        const nameNode = node.childForFieldName('name');
+        const className = nameNode ? nameNode.text : null;
+        if (className) {
+          nodes.push({
+            id: nodeId(className), kind: 'class', name: className, file: relFile,
+            lines: [node.startPosition.row + 1, node.endPosition.row + 1]
+          });
+          declaredNames.add(className);
+          const body = node.childForFieldName('body');
+          if (body) {
+            for (const member of body.namedChildren) {
+              if (member.type === 'method_definition') {
+                const methodName = member.childForFieldName('name');
+                if (methodName) addFunctionNode(`${className}.${methodName.text}`, member.startPosition.row, member.endPosition.row);
+              }
             }
           }
         }
       }
+      nextInsideFunction = true;
     } else if (node.type === 'lexical_declaration') {
       for (const decl of node.namedChildren) {
         if (decl.type !== 'variable_declarator') continue;
         const nameNode = decl.childForFieldName('name');
         const valueNode = decl.childForFieldName('value');
         if (nameNode && valueNode && (valueNode.type === 'arrow_function' || valueNode.type === 'function_expression')) {
-          addFunctionNode(nameNode.text, node.startPosition.row, node.endPosition.row);
+          if (!insideFunction) addFunctionNode(nameNode.text, node.startPosition.row, node.endPosition.row);
         }
       }
+      nextInsideFunction = true;
     } else if (node.type === 'import_statement') {
       const sourceNode = node.childForFieldName('source');
       if (sourceNode) {
@@ -86,22 +98,44 @@ function extractFromTree(rootNode, relFile) {
         if (target) edges.push({ from: relFile, to: target, kind: 'imports' });
       }
     }
-    for (const child of node.namedChildren) collectDeclarations(child);
+    for (const child of node.namedChildren) collectDeclarations(child, nextInsideFunction);
   }
-  collectDeclarations(rootNode);
+  collectDeclarations(rootNode, false);
 
-  function collectCalls(node, scopeStack, currentClassName) {
-    let nextScopeStack = scopeStack;
+  // Mirrors collectDeclarations exactly: only one level of recorded scope
+  // can ever be active, so `scope` is the current recorded scope's node id
+  // (or null at file/top level) rather than a stack. A call made anywhere
+  // inside a nested (unrecorded) closure attributes to the nearest
+  // enclosing recorded scope — never to a scope that was never recorded.
+  function collectCalls(node, scope, currentClassName) {
+    let nextScope = scope;
     let nextClassName = currentClassName;
     if (node.type === 'class_declaration') {
-      const nameNode = node.childForFieldName('name');
-      nextClassName = nameNode ? nameNode.text : currentClassName;
+      if (scope === null) {
+        const nameNode = node.childForFieldName('name');
+        nextClassName = nameNode ? nameNode.text : currentClassName;
+      }
     } else if (node.type === 'function_declaration') {
-      const nameNode = node.childForFieldName('name');
-      if (nameNode) nextScopeStack = [...scopeStack, nodeId(nameNode.text)];
+      if (scope === null) {
+        const nameNode = node.childForFieldName('name');
+        if (nameNode) nextScope = nodeId(nameNode.text);
+      }
     } else if (node.type === 'method_definition') {
-      const nameNode = node.childForFieldName('name');
-      if (nameNode && currentClassName) nextScopeStack = [...scopeStack, nodeId(`${currentClassName}.${nameNode.text}`)];
+      if (scope === null) {
+        const nameNode = node.childForFieldName('name');
+        if (nameNode && currentClassName) nextScope = nodeId(`${currentClassName}.${nameNode.text}`);
+      }
+    } else if (node.type === 'lexical_declaration') {
+      if (scope === null) {
+        for (const decl of node.namedChildren) {
+          if (decl.type !== 'variable_declarator') continue;
+          const nameNode = decl.childForFieldName('name');
+          const valueNode = decl.childForFieldName('value');
+          if (nameNode && valueNode && (valueNode.type === 'arrow_function' || valueNode.type === 'function_expression')) {
+            nextScope = nodeId(nameNode.text);
+          }
+        }
+      }
     }
     if (node.type === 'call_expression') {
       const fn = node.childForFieldName('function');
@@ -112,13 +146,13 @@ function extractFromTree(rootNode, relFile) {
         if (prop) calleeName = prop.text;
       }
       if (calleeName && declaredNames.has(calleeName)) {
-        const from = scopeStack.length ? scopeStack[scopeStack.length - 1] : relFile;
+        const from = scope !== null ? scope : relFile;
         edges.push({ from, to: nodeId(calleeName), kind: 'calls' });
       }
     }
-    for (const child of node.namedChildren) collectCalls(child, nextScopeStack, nextClassName);
+    for (const child of node.namedChildren) collectCalls(child, nextScope, nextClassName);
   }
-  collectCalls(rootNode, [], null);
+  collectCalls(rootNode, null, null);
 
   return { nodes, edges };
 }

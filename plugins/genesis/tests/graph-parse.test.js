@@ -89,3 +89,23 @@ test('parseFile returns null for an unsupported extension', () => {
 test('parseFile returns null for a nonexistent file', () => {
   assert.equal(gp.parseFile('/nonexistent/a.js', 'a.js'), null);
 });
+
+test('extractFromTree does not record a function nested inside another function as a separate node (avoids same-name collisions)', () => {
+  const root = parseJs(
+    'function a() {\n  function helper(){return 1;}\n  return helper();\n}\nfunction b() {\n  function helper(){return 2;}\n  return helper();\n}\n'
+  );
+  const { nodes } = gp.extractFromTree(root, 'src/e.js');
+  const names = nodes.map(n => n.name).sort();
+  assert.deepEqual(names, ['a', 'b']);
+  const ids = nodes.map(n => n.id);
+  assert.equal(new Set(ids).size, ids.length, 'no duplicate node ids');
+});
+
+test('extractFromTree attributes a call made inside a nested arrow function to the nearest enclosing top-level function, not the arrow itself', () => {
+  const root = parseJs(
+    'function outer() {\n  const helper = () => {\n    return inner();\n  };\n  return helper();\n}\nfunction inner(){return 1;}\n'
+  );
+  const { nodes, edges } = gp.extractFromTree(root, 'src/f.js');
+  assert.deepEqual(nodes.map(n => n.name).sort(), ['inner', 'outer']);
+  assert.deepEqual(edges, [{ from: 'src/f.js#outer', to: 'src/f.js#inner', kind: 'calls' }]);
+});

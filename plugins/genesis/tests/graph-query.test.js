@@ -76,6 +76,38 @@ test('where re-parses a file whose content drifted since the last indexed hash (
   assert.equal(q.where(d, 'g'), 'src/a.js:2-2');
 });
 
+test('callers re-parses a file whose content drifted since the last indexed hash (drift check)', () => {
+  const d = tmpProject();
+  const abs = writeSrc(d, 'src/a.js', 'function f(){ return b(); }\nfunction b(){}\n');
+  idx.indexFile(d, abs);
+  // Simulate a missed incremental update: edit the file WITHOUT calling indexFile.
+  fs.writeFileSync(abs, 'function f(){ return b(); }\nfunction b(){}\nfunction c(){ return b(); }\n');
+  assert.match(q.callers(d, 'b'), /c \(src\/a\.js:3\)/);
+});
+
+test('imports re-parses a file whose content drifted since the last indexed hash (drift check)', () => {
+  const d = tmpProject();
+  writeSrc(d, 'src/b.js', 'function g(){}\n');
+  writeSrc(d, 'src/c.js', 'function h(){}\n');
+  const abs = writeSrc(d, 'src/a.js', "import './b.js';\n");
+  idx.indexFile(d, abs);
+  // Simulate a missed incremental update: edit the file WITHOUT calling indexFile.
+  fs.writeFileSync(abs, "import './b.js';\nimport './c.js';\n");
+  assert.equal(q.imports(d, 'src/a.js'), 'src/b.js\nsrc/c.js');
+});
+
+test('impact re-parses a file whose content drifted since the last indexed hash (drift check)', () => {
+  const d = tmpProject();
+  const c = writeSrc(d, 'src/c.js', 'function h(){}\n');
+  const abs = writeSrc(d, 'src/a.js', "import './b.js';\n");
+  writeSrc(d, 'src/b.js', 'function g(){}\n');
+  idx.indexFile(d, abs);
+  idx.indexFile(d, c);
+  // Simulate a missed incremental update: edit the file WITHOUT calling indexFile.
+  fs.writeFileSync(abs, "import './b.js';\nimport './c.js';\n");
+  assert.equal(q.impact(d, 'src/c.js'), 'src/a.js');
+});
+
 test('CLI where prints the answer and exits 0', () => {
   const d = tmpProject();
   idx.indexFile(d, writeSrc(d, 'src/a.js', 'function f(){}\n'));

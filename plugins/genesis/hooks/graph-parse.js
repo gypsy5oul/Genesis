@@ -102,6 +102,16 @@ function extractFromTree(rootNode, relFile) {
       // node — redundant with the branch above but harmless, since nothing
       // is recorded here, only the flag is set.
       nextInsideFunction = true;
+    } else if (node.type === 'method_definition') {
+      // A method_definition reached here (NOT via the explicit class-body
+      // loop in the class_declaration branch above — that loop already
+      // recorded legitimate top-level class methods synchronously,
+      // independent of this generic recursion) means it's a bare method:
+      // an object-literal shorthand method, a class-expression's method,
+      // or similar. Its own name is never recorded as a node (only
+      // top-level class methods are), but anything declared inside its
+      // body must still be treated as nested, not top-level.
+      nextInsideFunction = true;
     } else if (node.type === 'import_statement') {
       const sourceNode = node.childForFieldName('source');
       if (sourceNode) {

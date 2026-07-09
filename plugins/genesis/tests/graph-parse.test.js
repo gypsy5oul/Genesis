@@ -133,3 +133,21 @@ test('extractFromTree attributes a call inside an anonymous callback to the near
   const { edges } = gp.extractFromTree(root, 'src/i.js');
   assert.deepEqual(edges, [{ from: 'src/i.js#outer', to: 'src/i.js#inner', kind: 'calls' }]);
 });
+
+test('extractFromTree does not record a function nested inside an object-literal shorthand method as a top-level node', () => {
+  const root = parseJs(
+    'register({ foo() { function helper() { return 1; } return helper(); } });\n' +
+    'register2({ foo() { function helper() { return 2; } return helper(); } });\n'
+  );
+  const { nodes } = gp.extractFromTree(root, 'src/j.js');
+  assert.equal(nodes.length, 0, 'no top-level declarations exist in this snippet');
+});
+
+test('extractFromTree does not record a function nested inside a class-expression method as a top-level node', () => {
+  const root = parseJs(
+    'const Widget = makeClass(class { render() { function helper() { return 1; } return helper(); } });\n'
+  );
+  const { nodes } = gp.extractFromTree(root, 'src/k.js');
+  const names = nodes.map(n => n.name);
+  assert.ok(!names.includes('helper'), `helper should not be recorded as top-level, got: ${names}`);
+});

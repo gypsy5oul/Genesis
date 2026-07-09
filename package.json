@@ -1,6 +1,11 @@
 {
   "name": "genesis",
   "private": true,
+  "dependencies": {
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-javascript": "0.23.1",
+    "tree-sitter-typescript": "0.23.2"
+  },
   "scripts": {
     "test": "node --test plugins/genesis/tests/*.test.js",
     "validate": "node plugins/genesis/evals/validate-structure.js",

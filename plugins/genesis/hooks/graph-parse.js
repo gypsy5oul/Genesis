@@ -151,19 +151,33 @@ function extractFromTree(rootNode, relFile) {
         break;
       }
       case 'lexical_declaration': {
+        // A single const/let statement can have multiple declarators
+        // (`const a = () => inner(), b = () => 1;`). Each one needs its own
+        // scope recursed into individually — the generic post-switch
+        // recursion below only walks this node's children ONCE, so if it
+        // were left to handle recursion, every declarator's body would be
+        // walked with whatever single `nextScope` this case last set,
+        // mis-attributing calls made inside an earlier declarator's value
+        // to a LATER declarator's scope. Recursing here (and returning
+        // early, skipping the generic recursion for this node) also lets
+        // each declarator's node use its OWN value's line span instead of
+        // the whole statement's.
         for (const decl of node.namedChildren) {
           if (decl.type !== 'variable_declarator') continue;
           const nameNode = decl.childForFieldName('name');
           const valueNode = decl.childForFieldName('value');
           if (nameNode && valueNode && (valueNode.type === 'arrow_function' || valueNode.type === 'function_expression')) {
+            let declScope = scope;
             if (!insideFunction) {
-              addFunctionNode(nameNode.text, node.startPosition.row, node.endPosition.row);
-              nextScope = nodeId(nameNode.text);
+              addFunctionNode(nameNode.text, valueNode.startPosition.row, valueNode.endPosition.row);
+              declScope = nodeId(nameNode.text);
             }
+            walk(valueNode, true, declScope, className);
+          } else if (valueNode) {
+            walk(valueNode, insideFunction, scope, className);
           }
         }
-        nextInsideFunction = true;
-        break;
+        return;
       }
       case 'function_expression':
       case 'arrow_function':

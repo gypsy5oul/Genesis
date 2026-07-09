@@ -52,6 +52,25 @@ test('extractFromTree finds a const-arrow-function declaration', () => {
   assert.equal(nodes[0].name, 'helper');
 });
 
+test('extractFromTree attributes each declarator in a multi-declarator const statement to its OWN scope, not the last declarator\'s', () => {
+  const root = parseJs(
+    'const a = () => {\n  return inner();\n},\n  b = () => {\n  return other();\n};\n' +
+    'function inner(){ return 1; }\nfunction other(){ return 2; }\n'
+  );
+  const { nodes, edges } = gp.extractFromTree(root, 'src/y.js');
+  assert.deepEqual(
+    edges.filter(e => e.kind === 'calls').sort((x, y) => x.from.localeCompare(y.from)),
+    [
+      { from: 'src/y.js#a', to: 'src/y.js#inner', kind: 'calls' },
+      { from: 'src/y.js#b', to: 'src/y.js#other', kind: 'calls' },
+    ]
+  );
+  const a = nodes.find(n => n.name === 'a');
+  const b = nodes.find(n => n.name === 'b');
+  assert.deepEqual(a.lines, [1, 3], 'a\'s recorded lines should span only its own arrow function value, not the whole statement');
+  assert.deepEqual(b.lines, [4, 6], 'b\'s recorded lines should span only its own arrow function value, not the whole statement');
+});
+
 test('extractFromTree emits a relative import edge', () => {
   const root = parseJs("import { validateEmail } from './validate.js';\n");
   const { edges } = gp.extractFromTree(root, 'src/users.js');

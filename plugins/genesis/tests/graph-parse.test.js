@@ -11,6 +11,13 @@ function parseJs(src) {
   return parser.parse(src).rootNode;
 }
 
+const TypeScript = require('tree-sitter-typescript').typescript;
+function parseTs(src) {
+  const parser = new Parser();
+  parser.setLanguage(TypeScript);
+  return parser.parse(src).rootNode;
+}
+
 test('detectLang maps extensions correctly', () => {
   assert.equal(gp.detectLang('src/a.js'), 'javascript');
   assert.equal(gp.detectLang('src/a.jsx'), 'javascript');
@@ -150,4 +157,55 @@ test('extractFromTree does not record a function nested inside a class-expressio
   const { nodes } = gp.extractFromTree(root, 'src/k.js');
   const names = nodes.map(n => n.name);
   assert.ok(!names.includes('helper'), `helper should not be recorded as top-level, got: ${names}`);
+});
+
+test('extractFromTree gives get/set accessors of the same name distinct ids (no collision)', () => {
+  const root = parseJs('class C {\n  get x() { return 1; }\n  set x(v) { this._x = v; }\n}\n');
+  const { nodes } = gp.extractFromTree(root, 'src/l.js');
+  const ids = nodes.map(n => n.id);
+  assert.equal(new Set(ids).size, ids.length, 'no duplicate ids');
+  assert.ok(ids.includes('src/l.js#C.get:x'));
+  assert.ok(ids.includes('src/l.js#C.set:x'));
+});
+
+test('extractFromTree gives a static method and an instance method of the same name distinct ids', () => {
+  const root = parseJs('class C {\n  foo() { return 1; }\n  static foo() { return 2; }\n}\n');
+  const { nodes } = gp.extractFromTree(root, 'src/m.js');
+  const ids = nodes.map(n => n.id);
+  assert.equal(new Set(ids).size, ids.length, 'no duplicate ids');
+  assert.ok(ids.includes('src/m.js#C.foo'));
+  assert.ok(ids.includes('src/m.js#C.static:foo'));
+});
+
+test('extractFromTree resolves a call from inside a class method to a same-file function correctly (regression check)', () => {
+  const root = parseJs('class UserService {\n  createUser(email) {\n    return validateEmail(email);\n  }\n}\nfunction validateEmail(e) {\n  return true;\n}\n');
+  const { edges } = gp.extractFromTree(root, 'src/n.js');
+  assert.deepEqual(edges, [{ from: 'src/n.js#UserService.createUser', to: 'src/n.js#validateEmail', kind: 'calls' }]);
+});
+
+test('extractFromTree does not record a function nested inside a generator function as a top-level node (avoids collision across sibling generators)', () => {
+  const root = parseJs(
+    'function* gen1(){ function helper(){return 1;} return helper(); }\n' +
+    'function* gen2(){ function helper(){return 2;} return helper(); }\n'
+  );
+  const { nodes } = gp.extractFromTree(root, 'src/o.js');
+  assert.equal(nodes.length, 0);
+});
+
+test('extractFromTree does not produce a dangling edge for a call made inside a class static block', () => {
+  const root = parseJs(
+    'class C {\n  static {\n    function helper(){ return other(); }\n    helper();\n  }\n}\nfunction other(){ return 1; }\n'
+  );
+  const { nodes, edges } = gp.extractFromTree(root, 'src/p.js');
+  const nodeIds = new Set(nodes.map(n => n.id));
+  for (const e of edges) {
+    assert.ok(e.from === 'src/p.js' || nodeIds.has(e.from), `dangling edge: from=${e.from} not in nodes`);
+    assert.ok(nodeIds.has(e.to), `dangling edge: to=${e.to} not in nodes`);
+  }
+});
+
+test('extractFromTree does not record a function nested inside a TypeScript namespace as a top-level node (avoids collision across sibling namespaces)', () => {
+  const root = parseTs('namespace N1 { function f(){ return 1; } }\nnamespace N2 { function f(){ return 2; } }\n');
+  const { nodes } = gp.extractFromTree(root, 'src/q.ts');
+  assert.equal(nodes.length, 0);
 });

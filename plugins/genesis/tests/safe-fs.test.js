@@ -92,3 +92,31 @@ test('withLock releases the lock even if fn throws', () => {
   assert.throws(() => safeFs.withLock(lockPath, () => { throw new Error('boom'); }));
   assert.equal(fs.existsSync(lockPath), false);
 });
+
+test('appendFileSafe creates the file and appends lines without truncating', () => {
+  const d = tmpDir();
+  const target = path.join(d, 'log.jsonl');
+  safeFs.appendFileSafe(d, target, '{"a":1}');
+  safeFs.appendFileSafe(d, target, '{"a":2}');
+  const lines = fs.readFileSync(target, 'utf8').split('\n').filter(Boolean);
+  assert.deepEqual(lines, ['{"a":1}', '{"a":2}']);
+});
+
+test('appendFileSafe refuses to append through a symlinked directory component', () => {
+  const d = tmpDir();
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'safe-fs-outside-'));
+  fs.symlinkSync(outside, path.join(d, 'linked'));
+  const target = path.join(d, 'linked', 'sub', 'log.jsonl');
+  assert.throws(() => safeFs.appendFileSafe(d, target, '{"a":1}'));
+  assert.equal(fs.existsSync(path.join(outside, 'sub', 'log.jsonl')), false);
+});
+
+test('appendFileSafe refuses to append to a symlinked target file', () => {
+  const d = tmpDir();
+  const real = path.join(d, 'real.jsonl');
+  fs.writeFileSync(real, '{"a":1}\n');
+  const linked = path.join(d, 'linked.jsonl');
+  fs.symlinkSync(real, linked);
+  assert.throws(() => safeFs.appendFileSafe(d, linked, '{"a":2}'));
+  assert.equal(fs.readFileSync(real, 'utf8'), '{"a":1}\n');
+});

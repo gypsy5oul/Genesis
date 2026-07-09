@@ -37,6 +37,19 @@ function writeFileSafe(cwd, filePath, contents, opts) {
   fs.renameSync(tmp, filePath);
 }
 
+function appendFileSafe(cwd, filePath, line) {
+  assertNoSymlinkInPath(cwd, path.dirname(filePath));
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  try {
+    if (fs.lstatSync(filePath).isSymbolicLink()) {
+      throw new Error(`refusing to append: ${filePath} is a symlink`);
+    }
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+  }
+  fs.appendFileSync(filePath, line.endsWith('\n') ? line : line + '\n');
+}
+
 // Advisory lock via O_EXCL. Stale locks (LOCK_STALE_MS old) are treated as
 // abandoned so a crashed process can't wedge future callers forever.
 const LOCK_STALE_MS = 10000;
@@ -81,6 +94,6 @@ function withLock(lockPath, fn) {
 }
 
 module.exports = {
-  assertNoSymlinkInPath, writeFileSafe, acquireLock, releaseLock, withLock,
+  assertNoSymlinkInPath, writeFileSafe, appendFileSafe, acquireLock, releaseLock, withLock,
   LOCK_STALE_MS, LOCK_RETRY_MS, LOCK_TIMEOUT_MS
 };

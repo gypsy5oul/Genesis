@@ -34,6 +34,13 @@
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/graph-index.js\"", "timeout": 10 }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/usage-tracker.js\"", "timeout": 10 }
+        ]
+      }
     ]
   }
 }

@@ -180,12 +180,16 @@ function extractFromTree(rootNode, relFile) {
       }
       case 'call_expression': {
         const fn = node.childForFieldName('function');
-        let calleeName = null;
-        if (fn && fn.type === 'identifier') calleeName = fn.text;
-        else if (fn && fn.type === 'member_expression') {
-          const prop = fn.childForFieldName('property');
-          if (prop) calleeName = prop.text;
-        }
+        // Only a plain identifier callee (`foo()`) is resolved. A
+        // member-expression callee (`obj.foo()`, `this.foo()`) is
+        // deliberately never resolved, even when the property name happens
+        // to match a declared top-level function/method — resolving it
+        // would either be a method-target call (out of scope, see
+        // graph-protocol.md) or, worse, silently collide with an unrelated
+        // top-level declaration sharing the same bare name (e.g.
+        // `this.bar()` on a class matching an unrelated top-level
+        // `function bar(){}`), producing a WRONG edge instead of silence.
+        const calleeName = (fn && fn.type === 'identifier') ? fn.text : null;
         if (calleeName && declaredNames.has(calleeName)) {
           const from = scope !== null ? scope : relFile;
           edges.push({ from, to: nodeId(calleeName), kind: 'calls' });

@@ -209,3 +209,18 @@ test('extractFromTree does not record a function nested inside a TypeScript name
   const { nodes } = gp.extractFromTree(root, 'src/q.ts');
   assert.equal(nodes.length, 0);
 });
+
+test('extractFromTree never resolves a member-expression call, even when the property name matches an unrelated top-level function (avoids a wrong edge, not just silence)', () => {
+  const root = parseJs(
+    'function bar(){ return 1; }\n' +
+    'class Foo {\n  bar(){ return 2; }\n  baz(){ return this.bar(); }\n}\n'
+  );
+  const { edges } = gp.extractFromTree(root, 'src/r.js');
+  assert.equal(edges.filter(e => e.kind === 'calls').length, 0, 'this.bar() must not resolve to the unrelated top-level bar()');
+});
+
+test('extractFromTree never resolves any member-expression call (obj.m()), even to a real top-level function of the same name', () => {
+  const root = parseJs('function f(){ return 1; }\nfunction g(){ return obj.f(); }\n');
+  const { edges } = gp.extractFromTree(root, 'src/s.js');
+  assert.equal(edges.filter(e => e.kind === 'calls').length, 0, 'obj.f() must not resolve, per the documented method-target-call limitation');
+});

@@ -42,5 +42,9 @@ Never invent a location the query didn't return.
 - Languages: JavaScript, TypeScript, TSX only.
 - `imports` edges: relative specifiers only (`./x`, `../x`). Bare package
   imports (`react`) aren't resolved to a file and don't appear.
-- `calls` edges: same-file only. Cross-file calls, dynamic dispatch, and
-  reflection aren't resolved — silence, not a wrong answer, when unresolved.
+- `calls` edges: same-file only, and only to a plain top-level
+  function/const-arrow referenced by its bare name. Method-target calls
+  (`obj.m()`, `this.m()`) are never resolved, even within the same file
+  and even when the target method exists — silence, not a wrong answer,
+  when unresolved. Cross-file calls, dynamic dispatch, and reflection
+  aren't resolved either.

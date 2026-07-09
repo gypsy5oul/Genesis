@@ -27,4 +27,7 @@ Read `../_shared/graph-protocol.md` first.
    from memory or re-grepping the tree as a silent substitute.
 5. Remind the reader of the scope limits from `graph-protocol.md` only when
    relevant (e.g. they ask about a Python file and the project graph is
-   JS/TS-only — say plainly that language isn't graphed yet, don't stay silent).
+   JS/TS-only — say plainly that language isn't graphed yet, don't stay silent;
+   or a `callers` query comes back empty for a class method — method calls like
+   `this.foo()`/`obj.foo()` aren't tracked, only calls to plain functions by name,
+   so say that rather than implying the method truly has no callers).

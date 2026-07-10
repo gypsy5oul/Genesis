@@ -3,7 +3,9 @@
 const fs = require('fs');
 const path = require('path');
 const { mutateGraph, readGraph } = require('./graph-store');
-const { parseFile, detectLang } = require('./graph-parse');
+const { parseFile, detectLang, readSourceSafe } = require('./graph-parse');
+const { scanMarkers } = require('./debt-scan');
+const { reconcileFileMarkers } = require('./debt-store');
 
 function toRel(cwd, absFile) {
   return path.relative(cwd, absFile).split(path.sep).join('/');
@@ -90,6 +92,17 @@ function indexFile(cwd, absFile) {
   const relFile = toRel(cwd, absFile);
   if (relFile.startsWith('..') || path.isAbsolute(relFile)) {
     return { ok: false, msg: `${absFile} is outside the project` };
+  }
+  // Debt-marker reconciliation runs before (and independent of) code-graph
+  // parsing below: it must cover every file a builder touches, including
+  // ones detectLang/parseFile skip entirely (YAML, Go, etc.) — a genesis:
+  // marker is a plain comment, not a graph node. A read failure here (huge
+  // file, disappeared mid-hook) just means no markers found this pass, not
+  // an error — and any store/reconcile bug is caught so it can never block
+  // the code-graph update that follows.
+  const source = readSourceSafe(absFile);
+  if (source !== null) {
+    try { reconcileFileMarkers(cwd, relFile, scanMarkers(source)); } catch { /* never block graph indexing */ }
   }
   try {
     // Cheap read-only peek before taking the lock: a file with an

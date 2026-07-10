@@ -270,3 +270,42 @@ test('indexFile is safe under real concurrent processes indexing different files
   const names = g.nodes.map(n => n.name).sort();
   assert.deepEqual(names, ['f', 'g'], 'both files must be indexed — a non-atomic read-modify-write would lose one');
 });
+
+test('indexFile reconciles a genesis: marker into docs/sdlc/debt.json', () => {
+  const d = tmpProject();
+  const abs = writeSrc(d, 'src/a.py', 'def f():\n    x = 1  # genesis: global lock, per-account locks later\n    return x\n');
+  idx.indexFile(d, abs);
+  const debtStore = require('../hooks/debt-store');
+  const items = debtStore.readDebt(d).items;
+  assert.equal(items.length, 1);
+  assert.equal(items[0].file, 'src/a.py');
+  assert.equal(items[0].line, 2);
+  assert.equal(items[0].ceiling, 'global lock');
+});
+
+test('indexFile reconciles markers even in a file type the code graph does not parse (language-agnostic)', () => {
+  const d = tmpProject();
+  const abs = writeSrc(d, 'src/config.yaml', 'setting: true\n# genesis: hardcoded value, load from env once configurable\n');
+  idx.indexFile(d, abs);
+  const debtStore = require('../hooks/debt-store');
+  const items = debtStore.readDebt(d).items;
+  assert.equal(items.length, 1, 'a skipped-language file must still be scanned for debt markers');
+  assert.equal(items[0].file, 'src/config.yaml');
+});
+
+test('indexFile removes a debt row once its marker line is edited away', () => {
+  const d = tmpProject();
+  const abs = writeSrc(d, 'src/a.py', '# genesis: hack, fix later\nx = 1\n');
+  idx.indexFile(d, abs);
+  writeSrc(d, 'src/a.py', 'x = 1\n');
+  idx.indexFile(d, abs);
+  const debtStore = require('../hooks/debt-store');
+  assert.deepEqual(debtStore.readDebt(d).items, []);
+});
+
+test('indexFile does not crash when the file cannot be read for debt scanning (still indexes the graph)', () => {
+  const d = tmpProject();
+  const abs = writeSrc(d, 'src/a.js', 'function f(){}\n');
+  const r = idx.indexFile(d, abs);
+  assert.equal(r.ok, true);
+});

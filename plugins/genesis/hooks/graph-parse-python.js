@@ -129,7 +129,7 @@ function extractPythonTree(rootNode, relFile) {
           if (dottedNameNode) {
             const dir = upDirs(relFile, dotCount);
             const target = dottedToPath(dottedNameNode.text);
-            edges.push({ from: relFile, to: `${dir}/${target}`, kind: 'imports' });
+            edges.push({ from: relFile, to: path.join(dir, target).split(path.sep).join('/'), kind: 'imports' });
           } else {
             const dir = upDirs(relFile, dotCount);
             const nameNodes = node.childrenForFieldName ? node.childrenForFieldName('name') : [];
@@ -140,7 +140,7 @@ function extractPythonTree(rootNode, relFile) {
                 const realNameNode = n.childForFieldName('name');
                 importedName = realNameNode ? realNameNode.text : null;
               }
-              if (importedName) edges.push({ from: relFile, to: `${dir}/${importedName}`, kind: 'imports' });
+              if (importedName) edges.push({ from: relFile, to: path.join(dir, importedName).split(path.sep).join('/'), kind: 'imports' });
             }
           }
         }

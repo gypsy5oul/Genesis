@@ -162,3 +162,17 @@ test('extractPythonTree resolves the real name (not the alias) in an aliased bar
   const imports = edges.filter(e => e.kind === 'imports');
   assert.deepEqual(imports, [{ from: 'src/users.py', to: 'src/mod', kind: 'imports' }]);
 });
+
+test('extractPythonTree resolves a relative import cleanly for a root-level file (no leading ./)', () => {
+  const root = parsePy('from .utils import x\n');
+  const { edges } = gpp.extractPythonTree(root, 'a.py');
+  const imports = edges.filter(e => e.kind === 'imports');
+  assert.deepEqual(imports, [{ from: 'a.py', to: 'utils', kind: 'imports' }]);
+});
+
+test('extractPythonTree resolves a bare-prefix relative import cleanly for a root-level file (no leading ./)', () => {
+  const root = parsePy('from . import sibling\n');
+  const { edges } = gpp.extractPythonTree(root, 'a.py');
+  const imports = edges.filter(e => e.kind === 'imports');
+  assert.deepEqual(imports, [{ from: 'a.py', to: 'sibling', kind: 'imports' }]);
+});

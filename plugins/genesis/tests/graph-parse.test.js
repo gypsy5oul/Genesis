@@ -18,6 +18,32 @@ function parseTs(src) {
   return parser.parse(src).rootNode;
 }
 
+test('readSourceSafe reads a real file', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'graph-parse-'));
+  const file = path.join(dir, 'a.txt');
+  fs.writeFileSync(file, 'hello\n');
+  assert.equal(gp.readSourceSafe(file), 'hello\n');
+});
+
+test('readSourceSafe returns null for a missing file', () => {
+  assert.equal(gp.readSourceSafe('/nonexistent/path/does-not-exist-12345.txt'), null);
+});
+
+test('readSourceSafe returns null for a symlinked file', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'graph-parse-'));
+  const real = path.join(dir, 'real.txt');
+  fs.writeFileSync(real, 'hi\n');
+  const link = path.join(dir, 'link.txt');
+  fs.symlinkSync(real, link);
+  assert.equal(gp.readSourceSafe(link), null);
+});
+
 test('detectLang maps extensions correctly', () => {
   assert.equal(gp.detectLang('src/a.js'), 'javascript');
   assert.equal(gp.detectLang('src/a.jsx'), 'javascript');

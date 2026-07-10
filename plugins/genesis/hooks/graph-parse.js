@@ -258,15 +258,25 @@ function extractFromTree(rootNode, relFile) {
   return { nodes, edges };
 }
 
+// Shared symlink/size-capped safe read. Originally inline in parseFile;
+// extracted so graph-index.js's debt-marker scan can read a file's raw
+// text the same safe way, for files parseFile itself would reject (an
+// unsupported extension, or one whose language it doesn't parse) — the
+// marker scan is language-agnostic and must not skip those files. Returns
+// null on symlink target, oversize file, or any read error — never throws.
+function readSourceSafe(absPath) {
+  let stat;
+  try { stat = fs.lstatSync(absPath); } catch { return null; }
+  if (stat.isSymbolicLink() || !stat.isFile() || stat.size > MAX_FILE_BYTES) return null;
+  try { return fs.readFileSync(absPath, 'utf8'); } catch { return null; }
+}
+
 function parseFile(absPath, relFile) {
   const lang = detectLang(relFile);
   if (!lang) return null;
   const grammar = grammarFor(lang);
-  let stat;
-  try { stat = fs.lstatSync(absPath); } catch { return null; }
-  if (stat.isSymbolicLink() || !stat.isFile() || stat.size > MAX_FILE_BYTES) return null;
-  let source;
-  try { source = fs.readFileSync(absPath, 'utf8'); } catch { return null; }
+  const source = readSourceSafe(absPath);
+  if (source === null) return null;
   const parser = new Parser();
   parser.setLanguage(grammar);
   let tree;
@@ -278,4 +288,6 @@ function parseFile(absPath, relFile) {
   return { nodes, edges, hash, lang };
 }
 
-module.exports = { detectLang, grammarFor, extractFromTree, resolveImportTarget, stripQuotes, parseFile };
+module.exports = {
+  detectLang, grammarFor, extractFromTree, resolveImportTarget, stripQuotes, parseFile, readSourceSafe,
+};

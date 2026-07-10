@@ -84,13 +84,11 @@ function extractPythonTree(rootNode, relFile) {
             nextScope = nodeId(relFile, nameNode.text);
           }
         }
-        nextInsideFunction = true;
         break;
       }
       case 'lambda': {
         // Anonymous, never recorded as a node even when assigned to a
         // top-level name (deliberate v1 simplification — see spec).
-        nextInsideFunction = true;
         break;
       }
       case 'call': {
@@ -103,6 +101,8 @@ function extractPythonTree(rootNode, relFile) {
         break;
       }
     }
+
+    if (SCOPE_CREATING_TYPES.has(node.type)) nextInsideFunction = true;
 
     for (const child of node.namedChildren) walk(child, nextInsideFunction, nextScope, nextClassName);
   }

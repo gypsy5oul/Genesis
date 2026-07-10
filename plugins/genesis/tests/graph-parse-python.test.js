@@ -102,3 +102,23 @@ test('extractPythonTree does not crash on async def, and treats it like a plain 
   assert.equal(nodes.length, 1);
   assert.equal(nodes[0].name, 'fetch');
 });
+
+test('extractPythonTree does not record a class nested inside a function', () => {
+  const root = parsePy('def outer():\n    class Inner:\n        def m(self):\n            pass\n');
+  const { nodes } = gpp.extractPythonTree(root, 'src/n.py');
+  assert.equal(nodes.length, 1);
+  assert.equal(nodes[0].name, 'outer');
+});
+
+test('extractPythonTree gives two classes with same-named methods distinct ids', () => {
+  const root = parsePy('class A:\n    def run(self):\n        return 1\nclass B:\n    def run(self):\n        return 2\n');
+  const { nodes } = gpp.extractPythonTree(root, 'src/o.py');
+  const ids = nodes.map(n => n.id).sort();
+  assert.deepEqual(ids, ['src/o.py#A', 'src/o.py#A.run', 'src/o.py#B', 'src/o.py#B.run']);
+});
+
+test('extractPythonTree records the correct line span for a multi-line function', () => {
+  const root = parsePy('def f():\n    x = 1\n    y = 2\n    return x + y\n');
+  const { nodes } = gpp.extractPythonTree(root, 'src/p.py');
+  assert.deepEqual(nodes[0].lines, [1, 4]);
+});

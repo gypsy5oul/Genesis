@@ -122,3 +122,43 @@ test('extractPythonTree records the correct line span for a multi-line function'
   const { nodes } = gpp.extractPythonTree(root, 'src/p.py');
   assert.deepEqual(nodes[0].lines, [1, 4]);
 });
+
+test('extractPythonTree does not emit an edge for an absolute import', () => {
+  const root = parsePy('import os\n');
+  const { edges } = gpp.extractPythonTree(root, 'src/j.py');
+  assert.equal(edges.filter(e => e.kind === 'imports').length, 0);
+});
+
+test('extractPythonTree does not emit an edge for an absolute from-import', () => {
+  const root = parsePy('from pkg.mod import x\n');
+  const { edges } = gpp.extractPythonTree(root, 'src/k.py');
+  assert.equal(edges.filter(e => e.kind === 'imports').length, 0);
+});
+
+test('extractPythonTree resolves a relative from-import with an explicit module path', () => {
+  const root = parsePy('from .utils import validate_email\n');
+  const { edges } = gpp.extractPythonTree(root, 'src/users.py');
+  const imports = edges.filter(e => e.kind === 'imports');
+  assert.deepEqual(imports, [{ from: 'src/users.py', to: 'src/utils', kind: 'imports' }]);
+});
+
+test('extractPythonTree resolves a two-level-up relative from-import with an explicit module path', () => {
+  const root = parsePy('from ..shared import helper\n');
+  const { edges } = gpp.extractPythonTree(root, 'src/pkg/users.py');
+  const imports = edges.filter(e => e.kind === 'imports');
+  assert.deepEqual(imports, [{ from: 'src/pkg/users.py', to: 'src/shared', kind: 'imports' }]);
+});
+
+test('extractPythonTree resolves each name in a bare-prefix relative import individually', () => {
+  const root = parsePy('from . import sibling, other\n');
+  const { edges } = gpp.extractPythonTree(root, 'src/users.py');
+  const imports = edges.filter(e => e.kind === 'imports').map(e => e.to).sort();
+  assert.deepEqual(imports, ['src/other', 'src/sibling']);
+});
+
+test('extractPythonTree resolves the real name (not the alias) in an aliased bare-prefix relative import', () => {
+  const root = parsePy('from . import mod as aliased\n');
+  const { edges } = gpp.extractPythonTree(root, 'src/users.py');
+  const imports = edges.filter(e => e.kind === 'imports');
+  assert.deepEqual(imports, [{ from: 'src/users.py', to: 'src/mod', kind: 'imports' }]);
+});

@@ -1,5 +1,7 @@
 'use strict';
 
+const path = require('path');
+
 // Node types that create a new function scope in Python. Anything declared
 // beneath one of these (transitively) is nested, not top-level, and is
 // never individually recorded as its own graph node — only module-scope
@@ -20,6 +22,20 @@ function unwrapDecorated(member) {
     return member.childForFieldName('definition') || member;
   }
   return member;
+}
+
+// "pkg.mod" -> "pkg/mod"
+function dottedToPath(dottedName) {
+  return dottedName.split('.').join('/');
+}
+
+// Directory `dotCount` levels up from `fromFile`'s own directory.
+// dotCount=1 (a single dot) means "same directory" — Python's own
+// relative-import convention.
+function upDirs(fromFile, dotCount) {
+  let dir = path.dirname(fromFile);
+  for (let i = 1; i < dotCount; i++) dir = path.dirname(dir);
+  return dir.split(path.sep).join('/');
 }
 
 function extractPythonTree(rootNode, relFile) {
@@ -98,6 +114,38 @@ function extractPythonTree(rootNode, relFile) {
           const from = scope !== null ? scope : relFile;
           edges.push({ from, to: nodeId(relFile, calleeName), kind: 'calls' });
         }
+        break;
+      }
+      case 'import_statement': {
+        // "import os", "import pkg.submodule" — absolute, v1 doesn't resolve.
+        break;
+      }
+      case 'import_from_statement': {
+        const moduleNameNode = node.childForFieldName('module_name');
+        if (moduleNameNode && moduleNameNode.type === 'relative_import') {
+          const prefixNode = moduleNameNode.namedChildren.find(c => c.type === 'import_prefix');
+          const dotCount = prefixNode ? prefixNode.text.length : 0;
+          const dottedNameNode = moduleNameNode.namedChildren.find(c => c.type === 'dotted_name');
+          if (dottedNameNode) {
+            const dir = upDirs(relFile, dotCount);
+            const target = dottedToPath(dottedNameNode.text);
+            edges.push({ from: relFile, to: `${dir}/${target}`, kind: 'imports' });
+          } else {
+            const dir = upDirs(relFile, dotCount);
+            const nameNodes = node.childrenForFieldName ? node.childrenForFieldName('name') : [];
+            for (const n of nameNodes) {
+              let importedName = null;
+              if (n.type === 'dotted_name') importedName = n.text;
+              else if (n.type === 'aliased_import') {
+                const realNameNode = n.childForFieldName('name');
+                importedName = realNameNode ? realNameNode.text : null;
+              }
+              if (importedName) edges.push({ from: relFile, to: `${dir}/${importedName}`, kind: 'imports' });
+            }
+          }
+        }
+        // module_name being a plain dotted_name (no relative_import) means
+        // an absolute from-import — v1 doesn't resolve those either.
         break;
       }
     }

@@ -86,8 +86,20 @@ test('estimateCost returns null when pricing is unknown', () => {
 test('humanizeTokens formats thousands and millions', () => {
   assert.equal(ut.humanizeTokens(500), '500');
   assert.equal(ut.humanizeTokens(12400), '12.4k');
+  assert.equal(ut.humanizeTokens(84000), '84k');
+  assert.equal(ut.humanizeTokens(1000), '1k');
   assert.equal(ut.humanizeTokens(2_300_000), '2.3M');
   assert.equal(ut.humanizeTokens(0), '0');
+});
+
+test('humanizeTokens promotes a k-tier value that rounds up to 1000 into the M tier', () => {
+  // 999_999 / 1000 = 999.999, which rounds to 1000.0 at one decimal place —
+  // must promote to "1M", not render as the boundary artifact "1000k".
+  assert.equal(ut.humanizeTokens(999_999), '1M');
+});
+
+test('humanizeTokens does not over-promote a value that stays under the k-tier rounding boundary', () => {
+  assert.equal(ut.humanizeTokens(999_499), '999.5k');
 });
 
 test('aggregateWeekly keeps only the latest entry per session_id within the window', () => {

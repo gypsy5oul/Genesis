@@ -91,7 +91,14 @@ function computeSessionUsage(transcriptPath) {
 function humanizeTokens(n) {
   if (!Number.isFinite(n) || n <= 0) return '0';
   if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
-  if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
+  if (n >= 1e3) {
+    // Rounding to one decimal in the k-tier (e.g. 999_999 -> 999.999k) can
+    // round UP to 1000.0 — that must promote to the M tier ("1M"), not
+    // render as the "1000k" boundary artifact.
+    const rounded = Math.round((n / 1e3) * 10) / 10;
+    if (rounded >= 1000) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+    return rounded.toFixed(1).replace(/\.0$/, '') + 'k';
+  }
   return String(Math.round(n));
 }
 

@@ -48,7 +48,7 @@ Development fans out across disjoint file sets — architect breaks the design i
 
 ## Codegraph — a live structural map of your code
 
-Every Genesis project gets its own structural code graph (`docs/sdlc/graph.json`): functions, classes, imports, and same-file calls, extracted with tree-sitter from your actual JS/TS/TSX source — not guessed from memory.
+Every Genesis project gets its own structural code graph (`docs/sdlc/graph.json`): functions, classes, imports, and same-file calls, extracted with tree-sitter from your actual JS/TS/TSX and Python source — not guessed from memory.
 
 - **Built once, kept current automatically.** The baseline is scanned at `/genesis:init`. From then on, a `PostToolUse` hook re-parses just the one file you touched after every Edit/Write — no full-repo rescan, cost scales with the edit, not the codebase. Files a sub-agent writes during `/genesis:develop`/`/genesis:maintain` (which bypass your own tool calls) are reconciled explicitly at the end of those stages, so nothing falls out of date.
 - **Queried at zero model tokens.** `where is X defined`, `what calls Y`, `what does this file import`, `what would break if I changed this file` are answered by a plain CLI script reading the graph — no LLM call to search the tree. A drift check re-parses a file on the spot if its content ever moves out of sync with what's recorded, so a query is never wrong because the index went stale.

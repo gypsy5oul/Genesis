@@ -39,7 +39,7 @@ const results = await pipeline(
     const verify = await agent(
       `Re-run tests for module "${m.name}" with: ${m.testCommand}. Report pass/fail counts and remaining defects.`,
       { label: `verify:${m.name}`, phase: 'Verify', agentType: 'qa-engineer', schema: RESULT })
-    return { module: m.name, ...(verify || result), fixedRound: true }
+    return { module: m.name, ...(verify || result), fixedRound: Boolean(fixResult) }
   }
 )
 return { modules: results.filter(Boolean) }

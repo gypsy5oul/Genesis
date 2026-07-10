@@ -1,7 +1,7 @@
 export const meta = {
   name: 'sdlc-develop',
   description: 'Parallel task implementation with adversarial per-task review and fix round',
-  phases: [{ title: 'Build' }, { title: 'Review' }, { title: 'Fix' }],
+  phases: [{ title: 'Build' }, { title: 'Review' }, { title: 'Fix' }, { title: 'Verify' }],
 }
 // args: { tasks: [{id,title,spec,files,discipline,complexity}], specPath, adrPath }
 // Tasks MUST have disjoint file sets (architect contract) — agents share one tree, no worktrees in v1.
@@ -41,7 +41,13 @@ const results = await pipeline(
     if (!fixReport) {
       fixReport = await agent(fixPrompt, { label: `fix:${t.id}`, phase: 'Fix', agentType: t.discipline, model: 'opus' })
     }
-    return { id: t.id, report: fixReport, findings: acc.review?.findings || [], fixed: Boolean(fixReport) }
+    if (!fixReport) return { id: t.id, report: acc.report, findings: acc.review.findings || [], fixed: false }
+    const reverify = await agent(
+      `Re-review task ${t.id} (${t.title}) after a fix attempt. Allowed files: ${t.files.join(', ')}. Fixer's report:\n${fixReport}\nOriginal blocking findings:\n${blocking.map(f => `${f.severity} | ${f.location} | ${f.problem}`).join('\n')}\nRun the stated tests yourself. Confirm each finding is actually resolved. Findings only (remaining unresolved ones, if any).`,
+      { label: `verify:${t.id}`, phase: 'Verify', agentType: 'code-reviewer', schema: FINDINGS }
+    )
+    const stillBlocking = reverify ? (reverify.findings || []).filter(f => f.severity === 'Critical' || f.severity === 'Required') : blocking
+    return { id: t.id, report: fixReport, findings: reverify ? reverify.findings || [] : acc.review.findings || [], fixed: stillBlocking.length === 0 }
   }
 )
 return { tasks: results.filter(Boolean) }

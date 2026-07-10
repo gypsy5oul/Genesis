@@ -39,6 +39,72 @@ test('develop: a review that legitimately found nothing still marks fixed:true',
   assert.equal(result.tasks[0].reviewFailed, undefined);
 });
 
+test('develop: a fix round re-verifies with a fresh review and marks fixed:true only when the re-review finds no more blocking findings', async () => {
+  const args = {
+    tasks: [{ id: 't1', title: 'thing', spec: 'x', files: ['a.js'], discipline: 'backend-dev', complexity: 'low' }],
+    specPath: 'docs/sdlc/01-requirements.md', adrPath: 'docs/sdlc/04-design.md'
+  };
+  let verifyCalled = false;
+  async function agent(prompt, opts) {
+    if (opts.phase === 'Build') return 'built a.js';
+    if (opts.phase === 'Review') return { findings: [{ severity: 'Critical', location: 'a.js:1', problem: 'bug', fix: 'do x' }] };
+    if (opts.phase === 'Fix') return 'fixer report: patched a.js';
+    if (opts.phase === 'Verify') { verifyCalled = true; return { findings: [] }; }
+    throw new Error('unexpected phase ' + opts.phase);
+  }
+  const result = await runWorkflow(DEVELOP, { agent, args });
+  const task = result.tasks[0];
+  assert.equal(verifyCalled, true, 'the fix round must dispatch a re-review, not trust the fixer\'s self-report');
+  assert.equal(task.fixed, true);
+  assert.equal(task.report, 'fixer report: patched a.js');
+  assert.deepEqual(task.findings, []);
+});
+
+test('develop: a fix round marks fixed:false when the re-review still finds blocking findings', async () => {
+  const args = {
+    tasks: [{ id: 't1', title: 'thing', spec: 'x', files: ['a.js'], discipline: 'backend-dev', complexity: 'low' }],
+    specPath: 'docs/sdlc/01-requirements.md', adrPath: 'docs/sdlc/04-design.md'
+  };
+  async function agent(prompt, opts) {
+    if (opts.phase === 'Build') return 'built a.js';
+    if (opts.phase === 'Review') return { findings: [{ severity: 'Required', location: 'a.js:1', problem: 'bug', fix: 'do x' }] };
+    if (opts.phase === 'Fix') return 'fixer report: tried to patch a.js';
+    if (opts.phase === 'Verify') return { findings: [{ severity: 'Required', location: 'a.js:1', problem: 'still broken', fix: 'do x again' }] };
+    throw new Error('unexpected phase ' + opts.phase);
+  }
+  const result = await runWorkflow(DEVELOP, { agent, args });
+  const task = result.tasks[0];
+  assert.equal(task.fixed, false, 'a fix must not be marked fixed:true just because the fixer returned a report');
+  assert.equal(task.findings.length, 1);
+});
+
+test('develop: if the fix agent fails entirely (both attempts null), fixed:false and no re-review is dispatched', async () => {
+  const args = {
+    tasks: [{ id: 't1', title: 'thing', spec: 'x', files: ['a.js'], discipline: 'backend-dev', complexity: 'low' }],
+    specPath: 'docs/sdlc/01-requirements.md', adrPath: 'docs/sdlc/04-design.md'
+  };
+  async function agent(prompt, opts) {
+    if (opts.phase === 'Build') return 'built a.js';
+    if (opts.phase === 'Review') return { findings: [{ severity: 'Critical', location: 'a.js:1', problem: 'bug', fix: 'do x' }] };
+    if (opts.phase === 'Fix') return null; // both the normal and opus-retry attempts die
+    if (opts.phase === 'Verify') throw new Error('must not re-review when no fix was ever obtained');
+    throw new Error('unexpected phase ' + opts.phase);
+  }
+  const result = await runWorkflow(DEVELOP, { agent, args });
+  const task = result.tasks[0];
+  assert.equal(task.fixed, false);
+  assert.equal(task.report, 'built a.js');
+});
+
+test('develop: meta.phases includes a Verify phase', () => {
+  const src = require('fs').readFileSync(DEVELOP, 'utf8');
+  const metaMatch = /export const meta = (\{[\s\S]*?\n\})\n/.exec(src);
+  assert.ok(metaMatch, 'develop.js must start with export const meta = {...}');
+  // eslint-disable-next-line no-eval
+  const meta = eval('(' + metaMatch[1] + ')');
+  assert.ok(meta.phases.some(p => p.title === 'Verify'), 'meta.phases must list the new Verify phase');
+});
+
 test('test workflow: a failed QA run (agent returns null) is NOT silently treated as passing', async () => {
   const args = { modules: [{ name: 'auth', paths: ['src/auth.js'], testCommand: 'npm test' }] };
   async function agent(prompt, opts) {
@@ -49,6 +115,36 @@ test('test workflow: a failed QA run (agent returns null) is NOT silently treate
   const mod = result.modules[0];
   assert.equal(mod.testRunFailed, true);
   assert.equal(mod.defects.length, 0, 'no real defect data exists to report');
+});
+
+test('test workflow: fixedRound reflects whether a fix was actually obtained, not just that a fix round was entered', async () => {
+  const args = { modules: [{ name: 'auth', paths: ['src/auth.js'], testCommand: 'npm test' }] };
+  async function agent(prompt, opts) {
+    if (opts.phase === 'Write+Run') {
+      return { passed: 1, failed: 1, defects: [{ severity: 'Critical', location: 'src/auth.js:1', problem: 'bug', failingTest: 'auth.test.js' }] };
+    }
+    if (opts.phase === 'Fix') return null; // both the normal and opus-retry attempts die
+    if (opts.phase === 'Verify') return { passed: 2, failed: 0, defects: [] };
+    throw new Error('unexpected phase ' + opts.phase);
+  }
+  const result = await runWorkflow(TEST_WF, { agent, args });
+  const mod = result.modules[0];
+  assert.equal(mod.fixedRound, false, 'no fix report was ever obtained — fixedRound must not be true');
+});
+
+test('test workflow: fixedRound is true when a fix report was actually obtained', async () => {
+  const args = { modules: [{ name: 'auth', paths: ['src/auth.js'], testCommand: 'npm test' }] };
+  async function agent(prompt, opts) {
+    if (opts.phase === 'Write+Run') {
+      return { passed: 1, failed: 1, defects: [{ severity: 'Critical', location: 'src/auth.js:1', problem: 'bug', failingTest: 'auth.test.js' }] };
+    }
+    if (opts.phase === 'Fix') return 'fixer report: patched src/auth.js';
+    if (opts.phase === 'Verify') return { passed: 2, failed: 0, defects: [] };
+    throw new Error('unexpected phase ' + opts.phase);
+  }
+  const result = await runWorkflow(TEST_WF, { agent, args });
+  const mod = result.modules[0];
+  assert.equal(mod.fixedRound, true);
 });
 
 test('design-panel: if every judge fails, returns an error instead of a fabricated winner', async () => {

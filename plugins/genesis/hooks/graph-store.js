@@ -18,7 +18,9 @@ function readGraph(cwd) {
     const st = fs.lstatSync(p);
     if (st.isSymbolicLink() || !st.isFile() || st.size > MAX_GRAPH_BYTES) return emptyGraph();
     const data = JSON.parse(fs.readFileSync(p, 'utf8'));
-    if (!data || typeof data !== 'object' || typeof data.files !== 'object' ||
+    if (!data || typeof data !== 'object' ||
+        data.files === null || Array.isArray(data.files) || typeof data.files !== 'object' ||
+        data.version !== 1 ||
         !Array.isArray(data.nodes) || !Array.isArray(data.edges)) return emptyGraph();
     if (!Array.isArray(data.skipped)) data.skipped = [];
     return data;

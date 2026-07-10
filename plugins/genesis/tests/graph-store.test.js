@@ -48,6 +48,34 @@ test('writeGraph refuses to write through a symlinked docs directory', () => {
   assert.throws(() => store.writeGraph(d, store.emptyGraph()));
 });
 
+test('readGraph rejects a graph.json with "files": null (falls back to emptyGraph, not a corrupted graph object)', () => {
+  const d = tmpProject();
+  fs.mkdirSync(path.join(d, 'docs', 'sdlc'), { recursive: true });
+  fs.writeFileSync(store.graphPath(d), JSON.stringify({ version: 1, files: null, nodes: [], edges: [] }));
+  assert.deepEqual(store.readGraph(d), store.emptyGraph());
+});
+
+test('readGraph rejects a graph.json with "files": [] (array, not a map)', () => {
+  const d = tmpProject();
+  fs.mkdirSync(path.join(d, 'docs', 'sdlc'), { recursive: true });
+  fs.writeFileSync(store.graphPath(d), JSON.stringify({ version: 1, files: [], nodes: [], edges: [] }));
+  assert.deepEqual(store.readGraph(d), store.emptyGraph());
+});
+
+test('readGraph rejects a graph.json missing "version" entirely', () => {
+  const d = tmpProject();
+  fs.mkdirSync(path.join(d, 'docs', 'sdlc'), { recursive: true });
+  fs.writeFileSync(store.graphPath(d), JSON.stringify({ files: {}, nodes: [], edges: [] }));
+  assert.deepEqual(store.readGraph(d), store.emptyGraph());
+});
+
+test('readGraph rejects a graph.json with "version": 2 (incompatible)', () => {
+  const d = tmpProject();
+  fs.mkdirSync(path.join(d, 'docs', 'sdlc'), { recursive: true });
+  fs.writeFileSync(store.graphPath(d), JSON.stringify({ version: 2, files: {}, nodes: [], edges: [] }));
+  assert.deepEqual(store.readGraph(d), store.emptyGraph());
+});
+
 test('writeGraph throws instead of writing when the graph exceeds the size cap', () => {
   const d = tmpProject();
   const g = store.emptyGraph();

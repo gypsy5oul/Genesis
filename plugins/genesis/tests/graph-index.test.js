@@ -207,6 +207,49 @@ test('re-editing a file to remove an unresolved import clears its stale unresolv
   assert.deepEqual(store.readGraph(d).unresolvedImports, [], 'stale entry for src/a.ts must not linger');
 });
 
+test('parseFile dispatches a .py file to the Python extractor', () => {
+  const gp = require('../hooks/graph-parse');
+  const d = tmpProject();
+  const abs = writeSrc(d, 'src/a.py', 'def f():\n    return 1\n');
+  const parsed = gp.parseFile(abs, 'src/a.py');
+  assert.ok(parsed, 'expected parseFile to return a result for a .py file, not null');
+  assert.equal(parsed.lang, 'python');
+  assert.equal(parsed.nodes.length, 1);
+  assert.equal(parsed.nodes[0].name, 'f');
+});
+
+test('indexFile resolves a Python relative import to a real .py file on disk', () => {
+  const d = tmpProject();
+  const a = writeSrc(d, 'src/a.py', 'from .b import helper\n');
+  const b = writeSrc(d, 'src/b.py', 'def helper():\n    return 1\n');
+  idx.indexFile(d, a);
+  idx.indexFile(d, b);
+  const g = store.readGraph(d);
+  assert.deepEqual(g.edges, [{ from: 'src/a.py', to: 'src/b.py', kind: 'imports' }]);
+});
+
+test('indexFile resolves a Python relative import via __init__.py (package form)', () => {
+  const d = tmpProject();
+  const a = writeSrc(d, 'src/a.py', 'from .pkg import helper\n');
+  const b = writeSrc(d, 'src/pkg/__init__.py', 'def helper():\n    return 1\n');
+  idx.indexFile(d, a);
+  idx.indexFile(d, b);
+  const g = store.readGraph(d);
+  assert.deepEqual(g.edges, [{ from: 'src/a.py', to: 'src/pkg/__init__.py', kind: 'imports' }]);
+});
+
+test('a JS file and a Python file in the same project each get routed to their own extractor', () => {
+  const d = tmpProject();
+  const jsFile = writeSrc(d, 'src/a.js', 'function f(){}\n');
+  const pyFile = writeSrc(d, 'src/b.py', 'def g():\n    return 1\n');
+  idx.indexFile(d, jsFile);
+  idx.indexFile(d, pyFile);
+  const g = store.readGraph(d);
+  assert.equal(g.files['src/a.js'].lang, 'javascript');
+  assert.equal(g.files['src/b.py'].lang, 'python');
+  assert.deepEqual(g.nodes.map(n => n.name).sort(), ['f', 'g']);
+});
+
 test('indexFile is safe under real concurrent processes indexing different files (mutateGraph atomicity, no lost update)', async () => {
   const d = tmpProject();
   writeSrc(d, 'src/a.js', 'function f(){}\n');

@@ -5,13 +5,16 @@ const crypto = require('crypto');
 const Parser = require('tree-sitter');
 const JavaScript = require('tree-sitter-javascript');
 const TypeScriptGrammars = require('tree-sitter-typescript');
+const Python = require('tree-sitter-python');
 const { MAX_FILE_BYTES } = require('./graph-store');
+const { extractPythonTree } = require('./graph-parse-python');
 
 function detectLang(relFile) {
   const ext = path.extname(relFile);
   if (['.js', '.jsx', '.mjs', '.cjs'].includes(ext)) return 'javascript';
   if (ext === '.ts') return 'typescript';
   if (ext === '.tsx') return 'tsx';
+  if (ext === '.py') return 'python';
   return null;
 }
 
@@ -19,6 +22,7 @@ function grammarFor(lang) {
   if (lang === 'javascript') return JavaScript;
   if (lang === 'typescript') return TypeScriptGrammars.typescript;
   if (lang === 'tsx') return TypeScriptGrammars.tsx;
+  if (lang === 'python') return Python;
   return null;
 }
 
@@ -267,7 +271,9 @@ function parseFile(absPath, relFile) {
   parser.setLanguage(grammar);
   let tree;
   try { tree = parser.parse(source); } catch { return null; }
-  const { nodes, edges } = extractFromTree(tree.rootNode, relFile);
+  const { nodes, edges } = lang === 'python'
+    ? extractPythonTree(tree.rootNode, relFile)
+    : extractFromTree(tree.rootNode, relFile);
   const hash = crypto.createHash('sha1').update(source).digest('hex');
   return { nodes, edges, hash, lang };
 }

@@ -24,7 +24,7 @@ test('detectLang maps extensions correctly', () => {
   assert.equal(gp.detectLang('src/a.mjs'), 'javascript');
   assert.equal(gp.detectLang('src/a.ts'), 'typescript');
   assert.equal(gp.detectLang('src/a.tsx'), 'tsx');
-  assert.equal(gp.detectLang('src/a.py'), null);
+  assert.equal(gp.detectLang('src/a.py'), 'python');
   assert.equal(gp.detectLang('README.md'), null);
 });
 
@@ -124,7 +124,7 @@ test('extractFromTree does not emit an edge for a call to an unresolved (unknown
 });
 
 test('parseFile returns null for an unsupported extension', () => {
-  assert.equal(gp.parseFile('/nonexistent/a.py', 'a.py'), null);
+  assert.equal(gp.parseFile('/nonexistent/a.md', 'a.md'), null);
 });
 
 test('parseFile returns null for a nonexistent file', () => {

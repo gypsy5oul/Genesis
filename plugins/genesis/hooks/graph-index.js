@@ -17,7 +17,8 @@ function toRel(cwd, absFile) {
 // tracked file is keyed 'src/b.ts'. First existing regular file wins.
 const IMPORT_RESOLUTION_SUFFIXES = [
   '', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
-  '/index.ts', '/index.tsx', '/index.js', '/index.jsx', '/index.mjs', '/index.cjs'
+  '/index.ts', '/index.tsx', '/index.js', '/index.jsx', '/index.mjs', '/index.cjs',
+  '.py', '/__init__.py'
 ];
 
 function resolveImportEdgeTarget(cwd, extensionlessRelTarget) {

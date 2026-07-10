@@ -39,7 +39,7 @@ Never invent a location the query didn't return.
 
 ## Scope (v1)
 
-- Languages: JavaScript, TypeScript, TSX only.
+- Languages: JavaScript, TypeScript, TSX, Python.
 - `imports` edges: relative specifiers only (`./x`, `../x`). Bare package
   imports (`react`) aren't resolved to a file and don't appear. Extensionless
   specifiers (`./b`) are resolved against the real filesystem — exact match,
@@ -53,3 +53,8 @@ Never invent a location the query didn't return.
   and even when the target method exists — silence, not a wrong answer,
   when unresolved. Cross-file calls, dynamic dispatch, and reflection
   aren't resolved either.
+- Python: only top-level functions/classes/methods are indexed (nested
+  functions and lambdas are not, same reasoning as JS); only relative
+  imports resolve (absolute imports, including intra-project ones, don't);
+  only same-file plain-name calls resolve (`self.foo()`/`obj.foo()` never
+  do, same reasoning as JS's member-expression decision).

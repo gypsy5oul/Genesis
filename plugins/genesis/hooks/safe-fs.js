@@ -18,17 +18,25 @@ function assertNoSymlinkInPath(cwd, targetDir) {
   }
 }
 
-function writeFileSafe(cwd, filePath, contents, opts) {
-  const backup = !opts || opts.backup !== false;
-  assertNoSymlinkInPath(cwd, path.dirname(filePath));
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+// Shared by writeFileSafe/appendFileSafe: refuses to operate on a path whose
+// target already exists as a symlink (a pre-existing regular file is fine —
+// only a symlink target is refused, so an attacker can't point the tracked
+// path at an arbitrary file outside the project via a symlink swap).
+function assertTargetNotSymlink(filePath, verb) {
   try {
     if (fs.lstatSync(filePath).isSymbolicLink()) {
-      throw new Error(`refusing to write: ${filePath} is a symlink`);
+      throw new Error(`refusing to ${verb}: ${filePath} is a symlink`);
     }
   } catch (e) {
     if (e.code !== 'ENOENT') throw e;
   }
+}
+
+function writeFileSafe(cwd, filePath, contents, opts) {
+  const backup = !opts || opts.backup !== false;
+  assertNoSymlinkInPath(cwd, path.dirname(filePath));
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  assertTargetNotSymlink(filePath, 'write');
   if (backup && fs.existsSync(filePath)) {
     try { fs.copyFileSync(filePath, filePath + '.bak'); } catch { /* backup failure must not block the write */ }
   }
@@ -40,13 +48,7 @@ function writeFileSafe(cwd, filePath, contents, opts) {
 function appendFileSafe(cwd, filePath, line) {
   assertNoSymlinkInPath(cwd, path.dirname(filePath));
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  try {
-    if (fs.lstatSync(filePath).isSymbolicLink()) {
-      throw new Error(`refusing to append: ${filePath} is a symlink`);
-    }
-  } catch (e) {
-    if (e.code !== 'ENOENT') throw e;
-  }
+  assertTargetNotSymlink(filePath, 'append');
   fs.appendFileSync(filePath, line.endsWith('\n') ? line : line + '\n');
 }
 

@@ -30,7 +30,7 @@ const APPROVED_STATUS_RE = /"status"\s*:\s*"approved"/;
 // not make tampering impossible.
 const STATE_JSON_RE = /state\.json/;
 const APPROVED_WORD_RE = /approved/;
-const WRITE_LIKE_RE = /(>|>>|sed\s+-i|tee\b|\bcp\b|\bmv\b)/;
+const WRITE_LIKE_RE = /(>|>>|sed\s+-i|perl\s+-i|tee\b|\bcp\b|\bmv\b|\bdd\s+of=)/;
 
 function looksLikeStateJsonTamperingCommand(command) {
   if (typeof command !== 'string' || !command) return false;

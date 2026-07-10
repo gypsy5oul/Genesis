@@ -96,6 +96,33 @@ test('guard: denies a Bash sed -i command that mentions state.json and approved 
   assert.ok(deny(r), 'expected a deny decision');
 });
 
+test('guard: denies a Bash perl -i command that mentions state.json and approved (write heuristic)', () => {
+  const d = tmpProject();
+  const r = runGuard({
+    cwd: d, tool_name: 'Bash',
+    tool_input: { command: "perl -i -pe 's/awaiting-approval/approved/' docs/sdlc/state.json" }
+  });
+  assert.equal(r.status, 0);
+  assert.ok(deny(r), 'expected a deny decision');
+});
+
+test('guard: denies a Bash dd of= command that mentions state.json and approved (write heuristic)', () => {
+  const d = tmpProject();
+  const r = runGuard({
+    cwd: d, tool_name: 'Bash',
+    // Note: the spec's literal example (`dd if=fake.json of=docs/sdlc/state.json`)
+    // never mentions "approved", so it can't trip the existing
+    // STATE_JSON_RE && APPROVED_WORD_RE && WRITE_LIKE_RE heuristic even with
+    // dd\s+of= added — verified against the pre-fix guard, it returns false
+    // for that exact string regardless. Using a realistic dd-based
+    // tampering command that DOES set an approved status so this test
+    // actually exercises the new dd\s+of= regex addition.
+    tool_input: { command: "echo '{\"status\":\"approved\"}' | dd of=docs/sdlc/state.json" }
+  });
+  assert.equal(r.status, 0);
+  assert.ok(deny(r), 'expected a deny decision');
+});
+
 test('guard: allows a read-only Bash command that references state.json and approved (no false positive)', () => {
   const d = tmpProject();
   const r = runGuard({

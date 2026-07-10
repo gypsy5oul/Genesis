@@ -96,6 +96,7 @@ Codegraph has no dedicated command — ask about your code in plain English and 
 - Security findings and destructive-operation instructions are always written in full plain English.
 - State file, graph, and usage-history reads are size-capped, symlink-safe, and sanitized before entering model context.
 - Every state-mutating write (state, graph, usage history) goes through the same atomic write-and-lock primitives, so a crash or a concurrent session can't corrupt the files Genesis depends on.
+- Builders follow a lean-code ladder (YAGNI → reuse → stdlib/native → existing dependency → one line → minimum) baked into their charters. A deliberate cut corner gets a `genesis: <ceiling>, <upgrade trigger>` comment instead of a silent shortcut — harvested automatically into `docs/sdlc/debt.json` by the same zero-token hook that keeps the code graph current, and surfaced at the start of `/genesis:maintain` triage so "later" doesn't quietly become "never".
 
 ## Genesis vs. building solo (unstructured prompting)
 

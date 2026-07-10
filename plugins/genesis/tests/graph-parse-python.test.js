@@ -1,0 +1,104 @@
+'use strict';
+const { test } = require('node:test');
+const assert = require('node:assert');
+const Parser = require('tree-sitter');
+const Python = require('tree-sitter-python');
+const gpp = require('../hooks/graph-parse-python');
+
+function parsePy(src) {
+  const parser = new Parser();
+  parser.setLanguage(Python);
+  return parser.parse(src).rootNode;
+}
+
+test('extractPythonTree records a top-level function', () => {
+  const root = parsePy('def create_user(email):\n    return email\n');
+  const { nodes } = gpp.extractPythonTree(root, 'src/users.py');
+  assert.equal(nodes.length, 1);
+  assert.equal(nodes[0].kind, 'function');
+  assert.equal(nodes[0].name, 'create_user');
+  assert.equal(nodes[0].id, 'src/users.py#create_user');
+  assert.deepEqual(nodes[0].lines, [1, 2]);
+});
+
+test('extractPythonTree records a class and its methods, including decorated ones', () => {
+  const root = parsePy(
+    'class UserService:\n' +
+    '    @staticmethod\n' +
+    '    def helper():\n' +
+    '        return 1\n' +
+    '    def create_user(self, email):\n' +
+    '        return email\n'
+  );
+  const { nodes } = gpp.extractPythonTree(root, 'src/users.py');
+  const ids = nodes.map(n => n.id).sort();
+  assert.deepEqual(ids, [
+    'src/users.py#UserService',
+    'src/users.py#UserService.create_user',
+    'src/users.py#UserService.helper',
+  ]);
+});
+
+test('extractPythonTree does not record a function nested inside another function (avoids same-name collisions)', () => {
+  const root = parsePy(
+    'def a():\n    def helper():\n        return 1\n    return helper()\n' +
+    'def b():\n    def helper():\n        return 2\n    return helper()\n'
+  );
+  const { nodes } = gpp.extractPythonTree(root, 'src/e.py');
+  const names = nodes.map(n => n.name).sort();
+  assert.deepEqual(names, ['a', 'b']);
+  const ids = nodes.map(n => n.id);
+  assert.equal(new Set(ids).size, ids.length, 'no duplicate node ids');
+});
+
+test('extractPythonTree does not record a lambda, even assigned to a top-level name', () => {
+  const root = parsePy('lam = lambda x: x + 1\n');
+  const { nodes } = gpp.extractPythonTree(root, 'src/f.py');
+  assert.equal(nodes.length, 0);
+});
+
+test('extractPythonTree does not record a function nested inside a method as top-level, and does not duplicate the method itself', () => {
+  const root = parsePy(
+    'class C:\n    def bar(self):\n        def inner():\n            return 1\n        return inner()\n'
+  );
+  const { nodes } = gpp.extractPythonTree(root, 'src/g.py');
+  const ids = nodes.map(n => n.id);
+  assert.deepEqual(ids, ['src/g.py#C', 'src/g.py#C.bar']);
+  assert.equal(new Set(ids).size, ids.length, 'no duplicate ids for C.bar');
+});
+
+test('extractPythonTree resolves a same-file call from a top-level function to another top-level function', () => {
+  const root = parsePy(
+    'def create_user(email):\n    return validate_email(email)\n' +
+    'def validate_email(e):\n    return True\n'
+  );
+  const { edges } = gpp.extractPythonTree(root, 'src/users.py');
+  const calls = edges.filter(e => e.kind === 'calls');
+  assert.deepEqual(calls, [{ from: 'src/users.py#create_user', to: 'src/users.py#validate_email', kind: 'calls' }]);
+});
+
+test('extractPythonTree resolves a same-file call from inside a method to a top-level function', () => {
+  const root = parsePy(
+    'class UserService:\n    def create_user(self, email):\n        return validate_email(email)\n' +
+    'def validate_email(e):\n    return True\n'
+  );
+  const { edges } = gpp.extractPythonTree(root, 'src/users.py');
+  const calls = edges.filter(e => e.kind === 'calls');
+  assert.deepEqual(calls, [{ from: 'src/users.py#UserService.create_user', to: 'src/users.py#validate_email', kind: 'calls' }]);
+});
+
+test('extractPythonTree never resolves a self.method()/obj.method() call, even to a real same-file function of that name', () => {
+  const root = parsePy(
+    'def validate_email(e):\n    return True\n' +
+    'class C:\n    def foo(self):\n        return self.validate_email()\n'
+  );
+  const { edges } = gpp.extractPythonTree(root, 'src/h.py');
+  assert.equal(edges.filter(e => e.kind === 'calls').length, 0);
+});
+
+test('extractPythonTree does not crash on async def, and treats it like a plain function', () => {
+  const root = parsePy('async def fetch():\n    return 1\n');
+  const { nodes } = gpp.extractPythonTree(root, 'src/i.py');
+  assert.equal(nodes.length, 1);
+  assert.equal(nodes[0].name, 'fetch');
+});

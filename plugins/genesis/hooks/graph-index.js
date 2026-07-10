@@ -32,17 +32,43 @@ function resolveImportEdgeTarget(cwd, extensionlessRelTarget) {
 
 // Resolves every 'imports'-kind edge's extensionless target against the real
 // filesystem, rewriting edge.to on a match. Edges that resolve to nothing
-// confirmable are DROPPED, not left pointing at a path we can't verify
-// exists — this codebase's established "silence, not a wrong answer" policy
-// (see graph-protocol.md). 'calls'-kind edges pass through unchanged.
+// confirmable are NOT dropped outright — the target file may simply not
+// exist yet (e.g. `a.ts` imports `./b` before `b.ts` is created). They're
+// returned separately as `unresolved` entries so the caller can remember
+// them (graph.unresolvedImports) and retroactively resolve them once the
+// target file is eventually indexed, rather than silently discarding all
+// record of the import until `a.ts` happens to be re-edited. 'calls'-kind
+// edges pass through unchanged.
 function resolveImportEdges(cwd, edges) {
   const out = [];
+  const unresolved = [];
   for (const edge of edges) {
     if (edge.kind !== 'imports') { out.push(edge); continue; }
     const resolved = resolveImportEdgeTarget(cwd, edge.to);
     if (resolved) out.push({ ...edge, to: resolved });
+    else unresolved.push({ from: edge.from, target: edge.to });
   }
-  return out;
+  return { edges: out, unresolved };
+}
+
+// Any entry in graph.unresolvedImports whose target now resolves to the file
+// just indexed (relFile) gets promoted to a real edge and dropped from the
+// pending list — this is what retroactively restores an edge that couldn't
+// be confirmed at the time its importing file was indexed. Mutates `graph`
+// in place (edges/unresolvedImports); called with the already-pruned,
+// already-updated graph right after the just-indexed file's own fresh
+// edges/unresolvedImports have been merged in.
+function resolvePendingImportsTargeting(cwd, graph, relFile) {
+  const stillUnresolved = [];
+  for (const entry of graph.unresolvedImports) {
+    const resolved = resolveImportEdgeTarget(cwd, entry.target);
+    if (resolved === relFile) {
+      graph.edges.push({ from: entry.from, to: relFile, kind: 'imports' });
+    } else {
+      stillUnresolved.push(entry);
+    }
+  }
+  graph.unresolvedImports = stillUnresolved;
 }
 
 function pruneFile(graph, relFile) {
@@ -51,7 +77,11 @@ function pruneFile(graph, relFile) {
     ...graph,
     nodes: graph.nodes.filter(n => n.file !== relFile),
     edges: graph.edges.filter(e => !scoped(e.from)),
-    skipped: graph.skipped.filter(s => s !== relFile)
+    skipped: graph.skipped.filter(s => s !== relFile),
+    // Only THIS file's own pending entries are cleared — they get naturally
+    // replaced by the fresh resolution attempt below. A different file's
+    // still-pending entry must survive re-indexing of an unrelated file.
+    unresolvedImports: (graph.unresolvedImports || []).filter(u => u.from !== relFile)
   };
 }
 
@@ -80,8 +110,15 @@ function indexFile(cwd, absFile) {
         return { graph: next, result: { ok: true, updated: false } };
       }
       next.nodes.push(...parsed.nodes);
-      next.edges.push(...resolveImportEdges(cwd, parsed.edges));
+      const { edges: resolvedEdges, unresolved } = resolveImportEdges(cwd, parsed.edges);
+      next.edges.push(...resolvedEdges);
+      for (const u of unresolved) {
+        if (!next.unresolvedImports.some(e => e.from === u.from && e.target === u.target)) {
+          next.unresolvedImports.push(u);
+        }
+      }
       next.files[relFile] = { lang: parsed.lang, hash: parsed.hash };
+      resolvePendingImportsTargeting(cwd, next, relFile);
       return { graph: next, result: { ok: true, updated: true } };
     });
   } catch (e) {
@@ -136,4 +173,7 @@ if (require.main === module) {
   else runHook();
 }
 
-module.exports = { indexFile, indexFiles, pruneFile, resolveImportEdgeTarget, resolveImportEdges };
+module.exports = {
+  indexFile, indexFiles, pruneFile, resolveImportEdgeTarget, resolveImportEdges,
+  resolvePendingImportsTargeting
+};

@@ -9,7 +9,7 @@ const MAX_FILE_BYTES = 1 * 1024 * 1024;
 function graphPath(cwd) { return path.join(cwd, 'docs', 'sdlc', 'graph.json'); }
 
 function emptyGraph() {
-  return { version: 1, files: {}, nodes: [], edges: [], skipped: [] };
+  return { version: 1, files: {}, nodes: [], edges: [], skipped: [], unresolvedImports: [] };
 }
 
 function readGraph(cwd) {
@@ -23,6 +23,7 @@ function readGraph(cwd) {
         data.version !== 1 ||
         !Array.isArray(data.nodes) || !Array.isArray(data.edges)) return emptyGraph();
     if (!Array.isArray(data.skipped)) data.skipped = [];
+    if (!Array.isArray(data.unresolvedImports)) data.unresolvedImports = [];
     return data;
   } catch {
     return emptyGraph();

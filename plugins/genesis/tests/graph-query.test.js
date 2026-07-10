@@ -67,6 +67,20 @@ test('impact lists direct importers of a file', () => {
   assert.equal(q.impact(d, 'src/b.js'), 'src/a.js');
 });
 
+test('impact retroactively picks up an import edge once the previously-missing target file is indexed', () => {
+  const d = tmpProject();
+  const a = writeSrc(d, 'src/a.ts', "import './b';\nfunction f(){}\n");
+  idx.indexFile(d, a);
+  // src/b.ts isn't tracked yet at all (never indexed) — impact() reports "no
+  // data", not "no importers found" (that's for a tracked file with zero
+  // importers). Either way, a.ts must NOT show up as an importer yet.
+  assert.match(q.impact(d, 'src/b.ts'), /no data/);
+
+  const b = writeSrc(d, 'src/b.ts', 'function g(){}\n');
+  idx.indexFile(d, b);
+  assert.equal(q.impact(d, 'src/b.ts'), 'src/a.ts');
+});
+
 test('where re-parses a file whose content drifted since the last indexed hash (drift check)', () => {
   const d = tmpProject();
   const abs = writeSrc(d, 'src/a.js', 'function f(){}\n');

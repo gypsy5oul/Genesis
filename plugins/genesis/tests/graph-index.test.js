@@ -181,6 +181,32 @@ test('indexFile drops an import edge when no candidate file exists on disk (sile
   assert.equal(g.edges.filter(e => e.kind === 'imports').length, 0);
 });
 
+test('indexFile records an unresolved import target in unresolvedImports and retroactively resolves it once the target file is indexed', () => {
+  const d = tmpProject();
+  const a = writeSrc(d, 'src/a.ts', "import './b';\nfunction f(){}\n");
+  idx.indexFile(d, a);
+  let g = store.readGraph(d);
+  assert.equal(g.edges.filter(e => e.kind === 'imports').length, 0, 'no edge yet — b.ts does not exist on disk');
+  assert.deepEqual(g.unresolvedImports, [{ from: 'src/a.ts', target: 'src/b' }]);
+
+  const b = writeSrc(d, 'src/b.ts', 'function g(){}\n');
+  idx.indexFile(d, b);
+  g = store.readGraph(d);
+  assert.deepEqual(g.edges, [{ from: 'src/a.ts', to: 'src/b.ts', kind: 'imports' }]);
+  assert.deepEqual(g.unresolvedImports, [], 'entry must be removed once resolved');
+});
+
+test('re-editing a file to remove an unresolved import clears its stale unresolvedImports entry', () => {
+  const d = tmpProject();
+  const a = writeSrc(d, 'src/a.ts', "import './b';\nfunction f(){}\n");
+  idx.indexFile(d, a);
+  assert.deepEqual(store.readGraph(d).unresolvedImports, [{ from: 'src/a.ts', target: 'src/b' }]);
+
+  writeSrc(d, 'src/a.ts', 'function f(){}\n'); // import removed
+  idx.indexFile(d, a);
+  assert.deepEqual(store.readGraph(d).unresolvedImports, [], 'stale entry for src/a.ts must not linger');
+});
+
 test('indexFile is safe under real concurrent processes indexing different files (mutateGraph atomicity, no lost update)', async () => {
   const d = tmpProject();
   writeSrc(d, 'src/a.js', 'function f(){}\n');

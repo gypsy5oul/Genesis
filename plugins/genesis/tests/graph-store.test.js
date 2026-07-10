@@ -15,6 +15,18 @@ test('readGraph returns emptyGraph when no file exists', () => {
   assert.deepEqual(g, store.emptyGraph());
 });
 
+test('emptyGraph includes an empty unresolvedImports array', () => {
+  assert.deepEqual(store.emptyGraph().unresolvedImports, []);
+});
+
+test('readGraph tolerates an old graph.json with no unresolvedImports field, defaulting to []', () => {
+  const d = tmpProject();
+  fs.mkdirSync(path.join(d, 'docs', 'sdlc'), { recursive: true });
+  fs.writeFileSync(store.graphPath(d), JSON.stringify({ version: 1, files: {}, nodes: [], edges: [], skipped: [] }));
+  const g = store.readGraph(d);
+  assert.deepEqual(g.unresolvedImports, []);
+});
+
 test('writeGraph then readGraph round-trips', () => {
   const d = tmpProject();
   const g = store.emptyGraph();

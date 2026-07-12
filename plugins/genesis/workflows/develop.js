@@ -27,24 +27,24 @@ const results = await pipeline(
   TASKS,
   (t) => agent(
     `Implement task ${t.id}: ${t.title}.\nSPEC (WHAT): read ${args.specPath}. ADRs (HOW, binding): read ${args.adrPath}. ADR wins architecture, SPEC wins scope.\nTask spec: ${t.spec}\nTouch ONLY: ${t.files.join(', ')}. Every changed line traces to this task. Run relevant tests before returning. Builder report: files / tests (command + counts) / notes.`,
-    { label: `build:${t.id}`, phase: 'Build', agentType: t.discipline, model: modelFor(t) }),
+    { label: `build:${t.id}`, phase: 'Build', agentType: 'genesis:' + t.discipline, model: modelFor(t) }),
   (report, t) => agent(
     `Adversarial review of task ${t.id} (${t.title}). Allowed files: ${t.files.join(', ')}. Builder report:\n${report}\nRun the stated tests yourself. Check contract fidelity vs ${args.adrPath}. Findings only.`,
-    { label: `review:${t.id}`, phase: 'Review', agentType: 'code-reviewer', schema: FINDINGS }
+    { label: `review:${t.id}`, phase: 'Review', agentType: 'genesis:code-reviewer', schema: FINDINGS }
   ).then(r => ({ report, review: r })),
   async (acc, t) => {
     if (!acc.review) return { id: t.id, report: acc.report, findings: [], fixed: false, reviewFailed: true }
     const blocking = (acc.review.findings || []).filter(f => f.severity === 'Critical' || f.severity === 'Required')
     if (!blocking.length) return { id: t.id, report: acc.report, findings: acc.review.findings || [], fixed: true }
     const fixPrompt = `Fix these review findings on task ${t.id}. Touch only: ${t.files.join(', ')}. Findings:\n${blocking.map(f => `${f.severity} | ${f.location} | ${f.problem} | ${f.fix}`).join('\n')}\nRe-run tests. Builder report back.`
-    let fixReport = await agent(fixPrompt, { label: `fix:${t.id}`, phase: 'Fix', agentType: t.discipline })
+    let fixReport = await agent(fixPrompt, { label: `fix:${t.id}`, phase: 'Fix', agentType: 'genesis:' + t.discipline })
     if (!fixReport) {
-      fixReport = await agent(fixPrompt, { label: `fix:${t.id}`, phase: 'Fix', agentType: t.discipline, model: 'opus' })
+      fixReport = await agent(fixPrompt, { label: `fix:${t.id}`, phase: 'Fix', agentType: 'genesis:' + t.discipline, model: 'opus' })
     }
     if (!fixReport) return { id: t.id, report: acc.report, findings: acc.review.findings || [], fixed: false }
     const reverify = await agent(
       `Re-review task ${t.id} (${t.title}) after a fix attempt. Allowed files: ${t.files.join(', ')}. Fixer's report:\n${fixReport}\nOriginal blocking findings:\n${blocking.map(f => `${f.severity} | ${f.location} | ${f.problem}`).join('\n')}\nRun the stated tests yourself. Confirm each finding is actually resolved. Findings only (remaining unresolved ones, if any).`,
-      { label: `verify:${t.id}`, phase: 'Verify', agentType: 'code-reviewer', schema: FINDINGS }
+      { label: `verify:${t.id}`, phase: 'Verify', agentType: 'genesis:code-reviewer', schema: FINDINGS }
     )
     const stillBlocking = reverify ? (reverify.findings || []).filter(f => f.severity === 'Critical' || f.severity === 'Required') : blocking
     return { id: t.id, report: fixReport, findings: reverify ? reverify.findings || [] : acc.review.findings || [], fixed: stillBlocking.length === 0 }

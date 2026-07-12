@@ -105,6 +105,48 @@ test('develop: meta.phases includes a Verify phase', () => {
   assert.ok(meta.phases.some(p => p.title === 'Verify'), 'meta.phases must list the new Verify phase');
 });
 
+test('develop: every agent dispatch uses plugin-namespaced agentTypes (genesis:<role>), not bare role names', async () => {
+  const args = {
+    tasks: [{ id: 't1', title: 'thing', spec: 'x', files: ['a.js'], discipline: 'backend-dev', complexity: 'low' }],
+    specPath: 'docs/sdlc/01-requirements.md', adrPath: 'docs/sdlc/04-design.md'
+  };
+  const seen = {};
+  async function agent(prompt, opts) {
+    seen[opts.phase] = opts.agentType;
+    if (opts.phase === 'Build') return 'built a.js';
+    if (opts.phase === 'Review') return { findings: [{ severity: 'Critical', location: 'a.js:1', problem: 'bug', fix: 'do x' }] };
+    if (opts.phase === 'Fix') return 'fixer report: patched a.js';
+    if (opts.phase === 'Verify') return { findings: [] };
+    throw new Error('unexpected phase ' + opts.phase);
+  }
+  await runWorkflow(DEVELOP, { agent, args });
+  // discipline-derived builder/fixer must be namespaced from the bare 'backend-dev' contract value
+  assert.equal(seen.Build, 'genesis:backend-dev', 'builder agentType must be namespaced');
+  assert.equal(seen.Fix, 'genesis:backend-dev', 'fixer agentType must be namespaced');
+  // literal reviewer roles must be namespaced too
+  assert.equal(seen.Review, 'genesis:code-reviewer', 'reviewer agentType must be namespaced');
+  assert.equal(seen.Verify, 'genesis:code-reviewer', 're-reviewer agentType must be namespaced');
+});
+
+test('test workflow: every agent dispatch uses plugin-namespaced agentTypes (genesis:<role>), not bare role names', async () => {
+  const args = { modules: [{ name: 'auth', paths: ['src/auth.js'], testCommand: 'npm test' }] };
+  const seen = {};
+  async function agent(prompt, opts) {
+    seen[opts.phase] = opts.agentType;
+    if (opts.phase === 'Write+Run') {
+      return { passed: 1, failed: 1, defects: [{ severity: 'Critical', location: 'src/auth.js:1', problem: 'bug', failingTest: 'auth.test.js' }] };
+    }
+    if (opts.phase === 'Fix') return 'fixer report: patched src/auth.js';
+    if (opts.phase === 'Verify') return { passed: 2, failed: 0, defects: [] };
+    throw new Error('unexpected phase ' + opts.phase);
+  }
+  await runWorkflow(TEST_WF, { agent, args });
+  assert.equal(seen['Write+Run'], 'genesis:qa-engineer', 'QA agentType must be namespaced');
+  // no module.discipline supplied → default 'backend-dev' must still be namespaced
+  assert.equal(seen.Fix, 'genesis:backend-dev', 'fixer default agentType must be namespaced');
+  assert.equal(seen.Verify, 'genesis:qa-engineer', 'verify QA agentType must be namespaced');
+});
+
 test('test workflow: a failed QA run (agent returns null) is NOT silently treated as passing', async () => {
   const args = { modules: [{ name: 'auth', paths: ['src/auth.js'], testCommand: 'npm test' }] };
   async function agent(prompt, opts) {

@@ -153,6 +153,37 @@ test('callers/imports/impact no longer return a location in a deleted file', () 
   assert.match(q.impact(d, 'src/b.js'), /no importers found/);
 });
 
+test('imports(A) drops B once B is deleted from disk (inbound cross-file edge pruned)', () => {
+  const d = tmpProject();
+  // B exists on disk so A's import edge resolves and persists.
+  writeSrc(d, 'src/b.js', 'function g(){}\n');
+  const aAbs = writeSrc(d, 'src/a.js', "import './b.js';\n");
+  idx.indexFile(d, writeSrc(d, 'src/b.js', 'function g(){}\n'));
+  idx.indexFile(d, aAbs);
+  assert.equal(q.imports(d, 'src/a.js'), 'src/b.js'); // sanity: resolves while B exists
+
+  // Delete B WITHOUT re-indexing A. pruneFile clears B's OWN rows but the
+  // surviving {from:A,to:B} imports edge must also be dropped, or imports(A)
+  // would keep listing the now-gone B.
+  fs.unlinkSync(path.join(d, 'src/b.js'));
+  assert.match(q.imports(d, 'src/a.js'), /no imports found for "src\/a\.js"/);
+});
+
+test('imports(A) keeps still-existing C when only B is deleted (A imports B and C)', () => {
+  const d = tmpProject();
+  writeSrc(d, 'src/b.js', 'function g(){}\n');
+  writeSrc(d, 'src/c.js', 'function h(){}\n');
+  const aAbs = writeSrc(d, 'src/a.js', "import './b.js';\nimport './c.js';\n");
+  idx.indexFile(d, writeSrc(d, 'src/b.js', 'function g(){}\n'));
+  idx.indexFile(d, writeSrc(d, 'src/c.js', 'function h(){}\n'));
+  idx.indexFile(d, aAbs);
+  assert.equal(q.imports(d, 'src/a.js'), 'src/b.js\nsrc/c.js'); // sanity
+
+  fs.unlinkSync(path.join(d, 'src/b.js')); // delete only B
+  assert.equal(q.imports(d, 'src/a.js'), 'src/c.js'); // only C survives
+  assert.equal(q.impact(d, 'src/c.js'), 'src/a.js');  // C's own tracking unaffected
+});
+
 test('deletion pruning is persisted to docs/sdlc/graph.json on disk', () => {
   const store = require('../hooks/graph-store');
   const d = tmpProject();

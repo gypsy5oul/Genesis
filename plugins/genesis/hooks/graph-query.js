@@ -60,12 +60,37 @@ function refreshAnyDrifted(cwd, graph) {
     // pruneFile removes nodes/edges (scoped by `from`)/skipped/unresolvedImports
     // but intentionally leaves the `files` entry (indexFile re-sets or deletes
     // it afterward); for a deletion there's nothing to re-set, so drop it here.
+    //
+    // pruneFile scopes edge removal by `from` only — correct for its re-index
+    // use case (a file re-clearing its OWN outgoing edges). But for a DELETED
+    // file it leaves behind cross-file `imports` edges belonging to OTHER files
+    // that point INTO the deleted one: if A imports B and B is deleted, the
+    // edge {from:A, to:B, kind:'imports'} survives A's untouched row, so
+    // imports(A) would still list B, a file no longer on disk — the same
+    // "reference to a nonexistent file" this pruning exists to prevent
+    // (graph-protocol.md: an import target that doesn't resolve on disk is
+    // dropped, "silence, not a wrong answer"). So after every per-file prune,
+    // filter the accumulated edge list ONCE against the full set of deleted
+    // paths — O(edges), not O(deleted × edges). Only `imports`-kind edges are
+    // affected: a `calls` edge's `to` is a `file#symbol` node id, never a bare
+    // relFile, so `e.to === relFile` can't match it (and any `calls` edge FROM
+    // a symbol in the deleted file is already gone via pruneFile's `from`
+    // scoping).
+    const deletedSet = new Set(deleted);
     mutateGraph(cwd, (g) => {
       let next = g;
+      const pruned = new Set();
       for (const relFile of deleted) {
         if (!next.files[relFile]) continue; // already gone (e.g. concurrent write)
         next = pruneFile(next, relFile);
         delete next.files[relFile];
+        pruned.add(relFile);
+      }
+      if (pruned.size) {
+        next = {
+          ...next,
+          edges: next.edges.filter(e => !(e.kind === 'imports' && deletedSet.has(e.to)))
+        };
       }
       return { graph: next, result: null };
     });

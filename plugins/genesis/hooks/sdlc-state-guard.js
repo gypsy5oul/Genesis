@@ -118,19 +118,29 @@ function readStateText(cwd) {
   } catch { return null; }
 }
 
-// Applies a list of {old_string,new_string} replacements to `text` in order,
-// mirroring what the real Edit/MultiEdit tool would produce. Each replacement
-// must find its old_string (single replace of the first occurrence, as the
-// Edit tool requires a unique match); returns null if any old_string is
-// absent, so the caller falls back to the conservative check.
+// Applies a list of {old_string,new_string,replace_all} replacements to `text`
+// in order, mirroring what the real Edit/MultiEdit tool would produce. When an
+// edit's replace_all is truthy, ALL occurrences of old_string are replaced
+// (matching the real Edit tool with replace_all: true); otherwise only the
+// first occurrence is replaced (the tool's default, which requires a unique
+// match). Each replacement must find its old_string; returns null if any
+// old_string is absent or empty, so the caller falls back to the conservative
+// check. Replacing only the first occurrence when replace_all is truthy would
+// let a real multi-occurrence tamper (two stages sharing the search text both
+// flipped to "approved") slip past the simulation, so honoring replace_all
+// here keeps the guard strictly at least as strict as the real edit.
 function applyEdits(text, edits) {
   let out = text;
   for (const ed of edits) {
     const oldStr = ed && ed.old_string != null ? String(ed.old_string) : '';
     const newStr = ed && ed.new_string != null ? String(ed.new_string) : '';
-    const idx = out.indexOf(oldStr);
-    if (oldStr === '' || idx === -1) return null;
-    out = out.slice(0, idx) + newStr + out.slice(idx + oldStr.length);
+    if (oldStr === '' || out.indexOf(oldStr) === -1) return null;
+    if (ed && ed.replace_all) {
+      out = out.split(oldStr).join(newStr);
+    } else {
+      const idx = out.indexOf(oldStr);
+      out = out.slice(0, idx) + newStr + out.slice(idx + oldStr.length);
+    }
   }
   return out;
 }
@@ -146,7 +156,7 @@ function prospectiveContent(cwd, toolName, toolInput) {
   const base = readStateText(cwd);
   if (base == null) return null;
   if (toolName === 'Edit') {
-    return applyEdits(base, [{ old_string: toolInput.old_string, new_string: toolInput.new_string }]);
+    return applyEdits(base, [{ old_string: toolInput.old_string, new_string: toolInput.new_string, replace_all: toolInput.replace_all }]);
   }
   if (toolName === 'MultiEdit' && Array.isArray(toolInput.edits)) {
     return applyEdits(base, toolInput.edits);

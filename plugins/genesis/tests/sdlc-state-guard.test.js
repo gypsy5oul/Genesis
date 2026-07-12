@@ -239,6 +239,34 @@ test('guard: DENIES MultiEdit whose replacements flip a stage to approved on dis
   assert.ok(deny(r), 'a real new approval via MultiEdit must still be denied');
 });
 
+test('guard: DENIES Edit with replace_all that flips awaiting-approval stages to approved via a multi-occurrence match (simulation must honor replace_all)', () => {
+  const d = tmpProject();
+  // The real Edit tool with replace_all: true replaces EVERY occurrence of
+  // old_string. If the guard's simulation replaced only the FIRST occurrence
+  // it would diverge from what the real tool writes to disk. Here two stages
+  // are "awaiting-approval" and an earlier decoy occurrence of the search
+  // substring (in currentStage) is what a first-only simulation would consume
+  // — leaving both stage statuses unchanged in the simulated result, seeing no
+  // new approval, and wrongly ALLOWING the call. A replace_all-aware
+  // simulation flips both real statuses to "approved" and correctly denies.
+  const onDisk = {
+    project: 'demo', currentStage: 'awaiting-approval-marker',
+    stages: { requirements: { status: 'awaiting-approval' }, feasibility: { status: 'awaiting-approval' } }
+  };
+  seedState(d, onDisk);
+  const r = runGuard({
+    cwd: d, tool_name: 'Edit',
+    tool_input: {
+      file_path: lib.statePath(d),
+      old_string: 'awaiting-approval',
+      new_string: 'approved',
+      replace_all: true
+    }
+  });
+  assert.equal(r.status, 0);
+  assert.ok(deny(r), 'replace_all flipping stage statuses to approved (past a decoy first match) must be denied');
+});
+
 test('guard: falls back to conservative check and DENIES a Write whose content is not valid JSON but contains an approved status', () => {
   const d = tmpProject();
   seedState(d, stateWith({ requirements: { status: 'approved' }, feasibility: { status: 'pending' } }));

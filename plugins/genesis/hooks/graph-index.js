@@ -5,7 +5,7 @@ const path = require('path');
 const { mutateGraph, readGraph } = require('./graph-store');
 const { parseFile, detectLang, readSourceSafe } = require('./graph-parse');
 const { scanMarkers } = require('./debt-scan');
-const { reconcileFileMarkers } = require('./debt-store');
+const { reconcileFileMarkers, reconcileFilesMarkers } = require('./debt-store');
 const { statePath } = require('./sdlc-state');
 
 function toRel(cwd, absFile) {
@@ -141,8 +141,95 @@ function indexFile(cwd, absFile) {
   }
 }
 
+// Batched multi-file indexing: performs EVERY file's prune+parse+merge inside a
+// SINGLE mutateGraph (one lock acquisition, one readGraph, one
+// writeGraphUnlocked) instead of indexFile's one-full-read-and-write-per-file.
+// For a baseline scan of N files against a graph growing toward M nodes, the
+// old `absFiles.map(indexFile)` did O(N) separate read+serialize passes over
+// the whole graph — roughly O(N×M) total I/O; this collapses it to O(N)
+// parsing plus one O(M) serialize at the end.
+//
+// The per-file logic here is a faithful mirror of indexFile's body (same
+// already-skipped short-circuit, same pruneFile, same resolveImportEdges +
+// unresolvedImports dedup merge, same per-file resolvePendingImportsTargeting
+// threaded in order) so the final graph is IDENTICAL to calling indexFile N
+// times in sequence — including forward references, where a later file in the
+// batch resolves an earlier file's pending import (that's why
+// resolvePendingImportsTargeting still runs once per file, in order).
+function indexFilesBatch(cwd, absFiles) {
+  const entries = absFiles.map((absFile) => {
+    const relFile = toRel(cwd, absFile);
+    const outside = relFile.startsWith('..') || path.isAbsolute(relFile);
+    return { absFile, relFile, outside };
+  });
+  const valid = entries.filter((e) => !e.outside);
+
+  // Debt-marker reconciliation for every valid file, batched into one
+  // mutateDebt (mirroring indexFile's per-file reconcile). Runs before the code
+  // graph, covers file types the graph parser skips (YAML, Go, …), and is
+  // guarded so a debt bug can never block graph indexing.
+  const debtBatch = [];
+  for (const e of valid) {
+    const source = readSourceSafe(e.absFile);
+    if (source !== null) debtBatch.push({ relFile: e.relFile, found: scanMarkers(source) });
+  }
+  try { if (debtBatch.length) reconcileFilesMarkers(cwd, debtBatch); } catch { /* never block graph indexing */ }
+
+  const graphResults = new Map();
+  if (valid.length) {
+    try {
+      const res = mutateGraph(cwd, (graph) => {
+        let cur = graph;
+        const out = new Map();
+        for (const e of valid) {
+          // Same read-only short-circuit indexFile uses: an unsupported file
+          // already recorded in `skipped` can't become parseable by being
+          // re-listed, so leave it (and the array's order) exactly as-is.
+          if (detectLang(e.relFile) === null && cur.skipped.includes(e.relFile)) {
+            out.set(e.absFile, { ok: true, updated: false });
+            continue;
+          }
+          cur = pruneFile(cur, e.relFile);
+          const parsed = parseFile(e.absFile, e.relFile);
+          if (!parsed) {
+            cur.skipped.push(e.relFile);
+            delete cur.files[e.relFile];
+            out.set(e.absFile, { ok: true, updated: false });
+            continue;
+          }
+          cur.nodes.push(...parsed.nodes);
+          const { edges: resolvedEdges, unresolved } = resolveImportEdges(cwd, parsed.edges);
+          cur.edges.push(...resolvedEdges);
+          for (const u of unresolved) {
+            if (!cur.unresolvedImports.some((x) => x.from === u.from && x.target === u.target)) {
+              cur.unresolvedImports.push(u);
+            }
+          }
+          cur.files[e.relFile] = { lang: parsed.lang, hash: parsed.hash };
+          resolvePendingImportsTargeting(cwd, cur, e.relFile);
+          out.set(e.absFile, { ok: true, updated: true });
+        }
+        return { graph: cur, result: out };
+      });
+      for (const [k, v] of res) graphResults.set(k, v);
+    } catch (err) {
+      // One failed batch write (e.g. the size cap — which also drops a status
+      // marker, see graph-store) must not crash the caller. Report every valid
+      // file as failed with the shared reason; the hook/CLI stays non-blocking.
+      for (const e of valid) graphResults.set(e.absFile, { ok: false, msg: err.message });
+    }
+  }
+
+  return entries.map((e) => e.outside
+    ? { file: e.absFile, ok: false, msg: `${e.absFile} is outside the project` }
+    : { file: e.absFile, ...(graphResults.get(e.absFile) || { ok: false, msg: 'not indexed' }) });
+}
+
+// Kept as the batch entry point for the CLI --files path and the stage skills'
+// reconcile step. Single-file PostToolUse edits still go through indexFile —
+// that path is already O(1) per edit and deliberately unchanged.
 function indexFiles(cwd, absFiles) {
-  return absFiles.map(f => ({ file: f, ...indexFile(cwd, f) }));
+  return indexFilesBatch(cwd, absFiles);
 }
 
 function runCli(argv) {
@@ -151,7 +238,15 @@ function runCli(argv) {
   const fileIdx = argv.indexOf('--file');
   const filesIdx = argv.indexOf('--files');
   let targets = [];
-  if (fileIdx !== -1) {
+  if (argv.includes('--files-stdin')) {
+    // Newline-delimited file list on stdin — the ARG_MAX-proof form for a huge
+    // repo's baseline scan, where passing every path via argv would blow the
+    // OS argument-length limit before batching even runs. Blank lines ignored;
+    // --cwd still comes from argv. Read fd 0 synchronously to EOF.
+    let raw = '';
+    try { raw = fs.readFileSync(0, 'utf8'); } catch { raw = ''; }
+    targets = raw.split('\n').map((s) => s.trim()).filter(Boolean);
+  } else if (fileIdx !== -1) {
     targets = [argv[fileIdx + 1]];
   } else if (filesIdx !== -1) {
     for (let i = filesIdx + 1; i < argv.length; i++) {
@@ -193,11 +288,11 @@ function runHook() {
 
 if (require.main === module) {
   const argv = process.argv.slice(2);
-  if (argv.includes('--file') || argv.includes('--files')) runCli(argv);
+  if (argv.includes('--file') || argv.includes('--files') || argv.includes('--files-stdin')) runCli(argv);
   else runHook();
 }
 
 module.exports = {
-  indexFile, indexFiles, pruneFile, resolveImportEdgeTarget, resolveImportEdges,
+  indexFile, indexFiles, indexFilesBatch, pruneFile, resolveImportEdgeTarget, resolveImportEdges,
   resolvePendingImportsTargeting
 };

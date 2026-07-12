@@ -364,3 +364,152 @@ test('indexFile does not crash when the file cannot be read for debt scanning (s
   const r = idx.indexFile(d, abs);
   assert.equal(r.ok, true);
 });
+
+// ---- Part 1: batched multi-file indexing (indexFilesBatch) ----
+
+// Lays down an identical set of files in two fresh projects, indexes one with
+// N sequential indexFile calls and the other with a single indexFilesBatch,
+// and returns both resulting graphs for comparison.
+function buildTwoWays(files) {
+  const seq = tmpProject();
+  const batch = tmpProject();
+  const seqAbs = [];
+  const batchAbs = [];
+  for (const [rel, content] of files) {
+    seqAbs.push(writeSrc(seq, rel, content));
+    batchAbs.push(writeSrc(batch, rel, content));
+  }
+  for (const abs of seqAbs) idx.indexFile(seq, abs); // N separate lock/read/write cycles
+  idx.indexFilesBatch(batch, batchAbs);              // one lock/read/write cycle
+  return { seqGraph: store.readGraph(seq), batchGraph: store.readGraph(batch) };
+}
+
+test('indexFilesBatch produces an IDENTICAL graph to N sequential indexFile calls (nodes, edges, files, skipped)', () => {
+  const { seqGraph, batchGraph } = buildTwoWays([
+    ['src/a.js', "import './b.js';\nfunction f(){ return g(); }\nfunction g(){}\n"],
+    ['src/b.js', 'function h(){}\n'],
+    ['src/c.py', 'def p():\n    return 1\n'],
+    ['README.md', '# not parseable\n'],
+  ]);
+  assert.deepEqual(batchGraph, seqGraph);
+});
+
+test('indexFilesBatch resolves a FORWARD reference within one batch: file A (imports ./b) indexed BEFORE file B, edge still resolves — identically to sequential', () => {
+  // Cross-file *call* edges are not a v1 feature; the real forward-reference
+  // mechanism is unresolvedImports + resolvePendingImportsTargeting, which must
+  // still run per-file in order so B (later in the batch) retroactively resolves
+  // A's pending import to ./b.
+  const files = [
+    ['src/a.ts', "import './b';\nfunction f(){}\n"], // references b, which is indexed AFTER a
+    ['src/b.ts', 'function g(){}\n'],
+  ];
+  const { seqGraph, batchGraph } = buildTwoWays(files);
+  assert.deepEqual(batchGraph.edges, [{ from: 'src/a.ts', to: 'src/b.ts', kind: 'imports' }],
+    'the forward import edge must resolve inside the single batch');
+  assert.deepEqual(batchGraph.unresolvedImports, [], 'nothing should remain pending after B is indexed');
+  assert.deepEqual(batchGraph, seqGraph, 'batch must equal N sequential indexFile calls exactly');
+});
+
+test('indexFilesBatch reconciles debt markers for every file in the batch, identically to sequential', () => {
+  const debtStore = require('../hooks/debt-store');
+  const seq = tmpProject();
+  const batch = tmpProject();
+  const files = [
+    ['src/a.py', '# genesis: hack a, later\nx = 1\n'],
+    ['src/b.yaml', 'k: v\n# genesis: hack b, later\n'],
+  ];
+  const seqAbs = files.map(([r, c]) => writeSrc(seq, r, c));
+  const batchAbs = files.map(([r, c]) => writeSrc(batch, r, c));
+  for (const abs of seqAbs) idx.indexFile(seq, abs);
+  idx.indexFilesBatch(batch, batchAbs);
+  const strip = (items) => items.map(({ addedAt, ...rest }) => rest).sort((x, y) => (x.file + x.line).localeCompare(y.file + y.line));
+  assert.deepEqual(strip(debtStore.readDebt(batch).items), strip(debtStore.readDebt(seq).items));
+  assert.equal(debtStore.readDebt(batch).items.length, 2);
+});
+
+test('indexFilesBatch does genuinely FEWER graph writes than the per-file loop for N>1 files (one write, not N)', () => {
+  const realRename = fs.renameSync;
+  function countGraphWrites(run, d) {
+    let writes = 0;
+    fs.renameSync = (from, to) => { if (to === store.graphPath(d)) writes++; return realRename(from, to); };
+    try { run(); } finally { fs.renameSync = realRename; }
+    return writes;
+  }
+  const files = [
+    ['src/a.js', 'function a(){}\n'],
+    ['src/b.js', 'function b(){}\n'],
+    ['src/c.js', 'function c(){}\n'],
+  ];
+
+  const loopDir = tmpProject();
+  const loopAbs = files.map(([r, c]) => writeSrc(loopDir, r, c));
+  const loopWrites = countGraphWrites(() => { for (const abs of loopAbs) idx.indexFile(loopDir, abs); }, loopDir);
+
+  const batchDir = tmpProject();
+  const batchAbs = files.map(([r, c]) => writeSrc(batchDir, r, c));
+  const batchWrites = countGraphWrites(() => idx.indexFilesBatch(batchDir, batchAbs), batchDir);
+
+  assert.equal(loopWrites, 3, 'the old per-file loop rewrites the whole graph once per file');
+  assert.equal(batchWrites, 1, 'the batch rewrites the whole graph exactly once for all N files');
+  assert.ok(batchWrites < loopWrites, 'batching must do strictly fewer graph writes for N>1');
+});
+
+test('indexFilesBatch does NOT crash and writes an oversized status marker when the batched write exceeds the size cap', () => {
+  const d = tmpProject();
+  // Seed a graph.json whose canonical serialization is just under the cap, so
+  // adding ANY node tips the next write over MAX_GRAPH_BYTES. readGraph accepts
+  // it (file size <= cap); the batch's write of graph+new node throws inside
+  // writeGraphUnlocked, which the batch catches.
+  const g = store.emptyGraph();
+  const node = { id: 'big.js#big', kind: 'function', name: '', file: 'big.js', lines: [1, 1] };
+  g.nodes.push(node);
+  g.files['big.js'] = { lang: 'javascript', hash: 'seed' };
+  let lo = 0, hi = store.MAX_GRAPH_BYTES;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi + 1) / 2);
+    node.name = 'a'.repeat(mid);
+    if (Buffer.byteLength(JSON.stringify(g, null, 2) + '\n') <= store.MAX_GRAPH_BYTES) lo = mid; else hi = mid - 1;
+  }
+  node.name = 'a'.repeat(lo);
+  fs.mkdirSync(path.dirname(store.graphPath(d)), { recursive: true });
+  fs.writeFileSync(store.graphPath(d), JSON.stringify(g, null, 2) + '\n');
+  const seedBytes = fs.readFileSync(store.graphPath(d), 'utf8');
+
+  const abs = writeSrc(d, 'src/a.js', 'function f(){}\n');
+  let results;
+  assert.doesNotThrow(() => { results = idx.indexFilesBatch(d, [abs]); }, 'the hook must never crash on an oversized write');
+  assert.equal(results[0].ok, false, 'the oversized file must report failure, not a silent success');
+
+  const status = store.readGraphStatus(d);
+  assert.ok(status && status.oversized === true, 'an oversized status marker must be written');
+  assert.ok(status.attemptedBytes > store.MAX_GRAPH_BYTES, 'marker records the attempted (over-cap) byte size');
+  assert.equal(typeof status.at, 'string');
+  assert.equal(fs.readFileSync(store.graphPath(d), 'utf8'), seedBytes, 'the oversized graph write must not have partially landed');
+});
+
+test('CLI --files-stdin reads a newline-delimited file list from stdin and indexes them', () => {
+  const d = tmpProject();
+  writeSrc(d, 'src/a.js', 'function f(){}\n');
+  writeSrc(d, 'src/b.js', 'function g(){}\n');
+  const r = runCli(['--files-stdin', '--cwd', d], 'src/a.js\nsrc/b.js\n');
+  assert.equal(r.status, 0);
+  const names = store.readGraph(d).nodes.map(n => n.name).sort();
+  assert.deepEqual(names, ['f', 'g'], 'both files piped via stdin must be indexed');
+});
+
+test('CLI --files-stdin tolerates blank lines and trailing whitespace in the list', () => {
+  const d = tmpProject();
+  writeSrc(d, 'src/a.js', 'function f(){}\n');
+  const r = runCli(['--files-stdin', '--cwd', d], '\n  src/a.js  \n\n');
+  assert.equal(r.status, 0);
+  assert.equal(store.readGraph(d).nodes.length, 1);
+});
+
+test('CLI --files argv mode is unaffected by the addition of --files-stdin (still indexes via argv)', () => {
+  const d = tmpProject();
+  writeSrc(d, 'src/a.js', 'function f(){}\n');
+  writeSrc(d, 'src/b.js', 'function g(){}\n');
+  const r = runCli(['--files', 'src/a.js', 'src/b.js', '--cwd', d]);
+  assert.equal(r.status, 0);
+  assert.equal(store.readGraph(d).nodes.length, 2);
+});

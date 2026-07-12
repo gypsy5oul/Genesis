@@ -95,3 +95,29 @@ test('writeGraph throws instead of writing when the graph exceeds the size cap',
   assert.throws(() => store.writeGraph(d, g), /exceeds/);
   assert.equal(fs.existsSync(store.graphPath(d)), false);
 });
+
+test('an over-cap write records an oversized status marker on disk before throwing', () => {
+  const d = tmpProject();
+  const g = store.emptyGraph();
+  g.nodes.push({ id: 'x', kind: 'function', name: 'x'.repeat(store.MAX_GRAPH_BYTES + 1), file: 'a.js', lines: [1, 1] });
+  assert.throws(() => store.writeGraph(d, g), /exceeds/);
+  const status = store.readGraphStatus(d);
+  assert.ok(status, 'a status marker must exist after an over-cap write');
+  assert.equal(status.oversized, true);
+  assert.ok(status.attemptedBytes > store.MAX_GRAPH_BYTES);
+  assert.equal(typeof status.at, 'string');
+  // The marker itself is tiny — it fits trivially under any cap.
+  assert.ok(fs.statSync(store.graphStatusPath(d)).size < 1000);
+});
+
+test('a later successful write clears a previously-set oversized status marker', () => {
+  const d = tmpProject();
+  // Simulate a prior oversized episode by writing the marker directly.
+  store.writeGraphStatus(d, { oversized: true, attemptedBytes: store.MAX_GRAPH_BYTES + 10, at: new Date().toISOString() });
+  assert.ok(store.readGraphStatus(d), 'sanity: marker present before the successful write');
+  const g = store.emptyGraph();
+  g.nodes.push({ id: 'a.js#f', kind: 'function', name: 'f', file: 'a.js', lines: [1, 1] });
+  store.writeGraph(d, g); // fits under the cap → must clear the marker
+  assert.equal(store.readGraphStatus(d), null, 'the marker must be cleared once a write succeeds');
+  assert.equal(fs.existsSync(store.graphStatusPath(d)), false);
+});

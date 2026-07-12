@@ -37,6 +37,13 @@ Run via Bash from the target project's root (or pass `--cwd <dir>`). Output
 is plain text, one result per line, or a `no data`/`no <x> found` message.
 Never invent a location the query didn't return.
 
+If a query's first output line begins `# WARNING: code graph exceeds its size
+cap …`, the graph grew past its 5MB cap and stopped updating on that date — the
+answer below the warning may be stale. Treat it as a hint to verify against the
+source directly; the warning clears itself automatically once the graph writes
+successfully again (e.g. after enough stale files are pruned to fit under the
+cap).
+
 ## Scope (v1)
 
 - Languages: JavaScript, TypeScript, TSX, Python.

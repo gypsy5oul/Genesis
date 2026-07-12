@@ -3,7 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { readGraph } = require('./graph-store');
+const { readGraph, readGraphStatus } = require('./graph-store');
 const { indexFile } = require('./graph-index');
 
 function currentHash(absPath) {
@@ -87,7 +87,17 @@ function runCli(argv) {
     process.stdout.write(`unknown verb "${verb}"\n`);
     process.exit(1);
   }
-  process.stdout.write(handler(cwd, target) + '\n');
+  // Run the handler first (its drift-refresh may itself update or clear the
+  // status marker), THEN read the marker so the warning reflects the freshest
+  // state. If the graph is frozen over its size cap, prepend one visible
+  // staleness warning so the user doesn't silently trust a stale answer.
+  const answer = handler(cwd, target);
+  const status = readGraphStatus(cwd);
+  if (status && status.oversized) {
+    const since = typeof status.at === 'string' && status.at ? status.at.slice(0, 10) : 'an earlier update';
+    process.stdout.write(`# WARNING: code graph exceeds its size cap and has not been updated since ${since} — answers may be stale.\n`);
+  }
+  process.stdout.write(answer + '\n');
   process.exit(0);
 }
 

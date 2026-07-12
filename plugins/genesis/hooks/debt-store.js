@@ -72,6 +72,40 @@ function reconcileFileMarkers(cwd, relFile, found) {
   });
 }
 
+// Batched form of reconcileFileMarkers: reconciles many files' markers in ONE
+// mutateDebt (one lock/read/write) instead of one per file. Semantically it is
+// exactly reconcileFileMarkers applied to each entry in order — each file only
+// replaces its OWN rows (addedAt preserved when a row is byte-identical),
+// other files' rows are untouched — so the final ledger is identical to calling
+// reconcileFileMarkers per file. Used by graph-index's indexFilesBatch so a
+// large baseline scan doesn't re-read/re-serialize the whole ledger N times.
+function reconcileFilesMarkers(cwd, perFile) {
+  return mutateDebt(cwd, (debt) => {
+    let items = debt.items;
+    const now = new Date().toISOString();
+    for (const { relFile, found } of perFile) {
+      const others = items.filter((it) => it.file !== relFile);
+      const prior = new Map(items.filter((it) => it.file === relFile).map((it) => [it.line, it]));
+      const nextItems = found.map((f) => {
+        const existing = prior.get(f.line);
+        const unchanged = existing
+          && existing.ceiling === f.ceiling && existing.trigger === f.trigger && existing.noTrigger === f.noTrigger;
+        return {
+          file: relFile,
+          line: f.line,
+          ceiling: f.ceiling,
+          trigger: f.trigger,
+          noTrigger: f.noTrigger,
+          addedAt: unchanged ? existing.addedAt : now,
+        };
+      });
+      items = [...others, ...nextItems];
+    }
+    return { debt: { ...debt, items }, result: { count: items.length } };
+  });
+}
+
 module.exports = {
-  debtPath, emptyDebt, readDebt, writeDebtUnlocked, mutateDebt, reconcileFileMarkers, MAX_DEBT_BYTES,
+  debtPath, emptyDebt, readDebt, writeDebtUnlocked, mutateDebt, reconcileFileMarkers,
+  reconcileFilesMarkers, MAX_DEBT_BYTES,
 };

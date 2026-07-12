@@ -135,3 +135,34 @@ test('CLI with missing args prints usage and exits 1', () => {
   assert.equal(r.status, 1);
   assert.match(r.stdout, /usage/);
 });
+
+// Seeds a valid graph.json with a single node in an UNtracked file (files: {}),
+// so graph-query's drift check has nothing to re-index and cannot inadvertently
+// clear the oversized marker mid-query.
+function seedStaticGraph(d) {
+  const g = require('../hooks/graph-store').emptyGraph();
+  g.nodes.push({ id: 'src/a.js#f', kind: 'function', name: 'f', file: 'src/a.js', lines: [1, 1] });
+  fs.mkdirSync(path.dirname(require('../hooks/graph-store').graphPath(d)), { recursive: true });
+  fs.writeFileSync(require('../hooks/graph-store').graphPath(d), JSON.stringify(g, null, 2) + '\n');
+}
+
+test('CLI prepends a staleness WARNING line when the oversized status marker is present', () => {
+  const store = require('../hooks/graph-store');
+  const d = tmpProject();
+  seedStaticGraph(d);
+  store.writeGraphStatus(d, { oversized: true, attemptedBytes: store.MAX_GRAPH_BYTES + 10, at: '2026-07-13T00:00:00.000Z' });
+  const r = runCli(['where', 'f', '--cwd', d]);
+  assert.equal(r.status, 0);
+  const lines = r.stdout.split('\n');
+  assert.match(lines[0], /^# WARNING: code graph exceeds its size cap .* since 2026-07-13 .* may be stale\./);
+  assert.match(r.stdout, /src\/a\.js:1-1/, 'the real answer must still be printed below the warning');
+});
+
+test('CLI does NOT prepend a warning line when no oversized status marker is present', () => {
+  const d = tmpProject();
+  seedStaticGraph(d);
+  const r = runCli(['where', 'f', '--cwd', d]);
+  assert.equal(r.status, 0);
+  assert.doesNotMatch(r.stdout, /WARNING/);
+  assert.equal(r.stdout.trim(), 'src/a.js:1-1');
+});

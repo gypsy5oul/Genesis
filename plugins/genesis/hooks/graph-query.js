@@ -3,8 +3,8 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { readGraph, readGraphStatus } = require('./graph-store');
-const { indexFile } = require('./graph-index');
+const { readGraph, readGraphStatus, mutateGraph } = require('./graph-store');
+const { indexFilesBatch, pruneFile } = require('./graph-index');
 
 function currentHash(absPath) {
   try { return crypto.createHash('sha1').update(fs.readFileSync(absPath)).digest('hex'); } catch { return null; }
@@ -16,20 +16,60 @@ function findNodeByName(graph, name) {
 
 // Drift check shared by every verb (where/callers/imports/impact): a query
 // should never be wrong due to staleness, regardless of which verb is
-// asked. Scans every tracked file's on-disk hash and re-parses any that
-// drifted from the graph's last-known hash (the incremental hook missed an
-// update) before the caller does its lookup — cheap when nothing drifted
-// (just a hash comparison per file), and correct even for a brand-new
-// symbol added to a file with no existing node to key a targeted check off
-// of.
+// asked. Scans every tracked file's on-disk hash and reconciles any that no
+// longer match the graph's last-known state before the caller does its
+// lookup — cheap when nothing drifted (just a hash comparison per file), and
+// correct even for a brand-new symbol added to a file with no existing node
+// to key a targeted check off of.
+//
+// Two kinds of drift are handled, each batched into ONE locked graph write
+// (one lock acquisition, one read-modify-write — the same batching pattern
+// indexFilesBatch established) rather than N separate ones:
+//   - CONTENT drift (currentHash differs but the file still reads): re-parse
+//     every such file in a single indexFilesBatch call.
+//   - DELETION (currentHash returns null — the file was removed, renamed, or
+//     moved and can no longer be read): its stale nodes/edges/files entry must
+//     be PRUNED, otherwise where/callers would still hand back a file:line in
+//     a file that no longer exists on disk — a wrong answer, which violates
+//     this feature's "silence, not a wrong answer" contract
+//     (graph-protocol.md). currentHash returning null used to be silently
+//     ignored (the `onDisk && …` guard was false), leaving those nodes
+//     forever.
+//
+// Batching the deletions into one mutateGraph also avoids reading a `graph`
+// object that would go stale between per-file prunes: the mutator reads the
+// graph fresh inside the lock and folds every deletion into it in order.
 function refreshAnyDrifted(cwd, graph) {
   let changed = false;
+  const deleted = [];
+  const drifted = [];
   for (const relFile of Object.keys(graph.files)) {
     const onDisk = currentHash(path.join(cwd, relFile));
-    if (onDisk && onDisk !== graph.files[relFile].hash) {
-      indexFile(cwd, path.join(cwd, relFile));
-      changed = true;
+    if (onDisk === null) {
+      // File can no longer be read — tracked but gone from disk.
+      deleted.push(relFile);
+    } else if (onDisk !== graph.files[relFile].hash) {
+      drifted.push(path.join(cwd, relFile));
     }
+  }
+  if (drifted.length) {
+    indexFilesBatch(cwd, drifted);
+    changed = true;
+  }
+  if (deleted.length) {
+    // pruneFile removes nodes/edges (scoped by `from`)/skipped/unresolvedImports
+    // but intentionally leaves the `files` entry (indexFile re-sets or deletes
+    // it afterward); for a deletion there's nothing to re-set, so drop it here.
+    mutateGraph(cwd, (g) => {
+      let next = g;
+      for (const relFile of deleted) {
+        if (!next.files[relFile]) continue; // already gone (e.g. concurrent write)
+        next = pruneFile(next, relFile);
+        delete next.files[relFile];
+      }
+      return { graph: next, result: null };
+    });
+    changed = true;
   }
   return changed ? readGraph(cwd) : graph;
 }

@@ -35,7 +35,13 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/graph-query.js impact <relFile>   # who imports
 
 Run via Bash from the target project's root (or pass `--cwd <dir>`). Output
 is plain text, one result per line, or a `no data`/`no <x> found` message.
-Never invent a location the query didn't return.
+Never invent a location the query didn't return — the query output itself
+stays "silence, not a wrong answer". Note that `no data for "X"` (the graph
+has never seen X — it may not exist, or may have been created outside an
+Edit/Write/MultiEdit call and never indexed) is weaker than a definitive
+`no <x> found` about a symbol the graph DOES track; `codegraph`/SKILL.md
+spells out when an explicitly-labeled `grep` fallback is appropriate for the
+former without ever passing the grep hit off as a graph result.
 
 If a query's first output line begins `# WARNING: code graph exceeds its size
 cap …`, the graph grew past its 5MB cap and stopped updating on that date — the

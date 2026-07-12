@@ -122,6 +122,84 @@ test('impact re-parses a file whose content drifted since the last indexed hash 
   assert.equal(q.impact(d, 'src/c.js'), 'src/a.js');
 });
 
+test('where prunes a tracked file that was deleted from disk (no stale location)', () => {
+  const d = tmpProject();
+  const abs = writeSrc(d, 'src/a.js', 'function gone(){}\n');
+  idx.indexFile(d, abs);
+  assert.equal(q.where(d, 'gone'), 'src/a.js:1-1');
+  // Delete the file WITHOUT re-indexing — the incremental hook never fires for
+  // an rm/mv done outside an Edit/Write/MultiEdit tool call.
+  fs.unlinkSync(abs);
+  assert.match(q.where(d, 'gone'), /no data/);
+});
+
+test('callers/imports/impact no longer return a location in a deleted file', () => {
+  const d = tmpProject();
+  writeSrc(d, 'src/b.js', 'function g(){}\n');
+  const abs = writeSrc(d, 'src/a.js',
+    "import './b.js';\nfunction caller(){ return target(); }\nfunction target(){}\n");
+  idx.indexFile(d, writeSrc(d, 'src/b.js', 'function g(){}\n'));
+  idx.indexFile(d, abs);
+  // Sanity: everything resolves while a.js exists.
+  assert.match(q.callers(d, 'target'), /caller \(src\/a\.js:2\)/);
+  assert.equal(q.impact(d, 'src/b.js'), 'src/a.js');
+
+  fs.unlinkSync(abs);
+  // callers of target: target's own node is gone, so this is now "no data".
+  assert.match(q.callers(d, 'target'), /no data/);
+  // imports of the deleted file: gone.
+  assert.match(q.imports(d, 'src/a.js'), /no data/);
+  // impact of b.js: a.js was its only importer and is gone -> no importers.
+  assert.match(q.impact(d, 'src/b.js'), /no importers found/);
+});
+
+test('deletion pruning is persisted to docs/sdlc/graph.json on disk', () => {
+  const store = require('../hooks/graph-store');
+  const d = tmpProject();
+  const abs = writeSrc(d, 'src/a.js', 'function gone(){}\n');
+  idx.indexFile(d, abs);
+  // The node exists on disk before the query.
+  let onDisk = JSON.parse(fs.readFileSync(store.graphPath(d), 'utf8'));
+  assert.ok(onDisk.nodes.some(n => n.name === 'gone'), 'precondition: node present on disk');
+  assert.ok(onDisk.files['src/a.js'], 'precondition: file tracked on disk');
+
+  fs.unlinkSync(abs);
+  q.where(d, 'gone');
+
+  onDisk = JSON.parse(fs.readFileSync(store.graphPath(d), 'utf8'));
+  assert.ok(!onDisk.nodes.some(n => n.name === 'gone'), 'node pruned from disk graph');
+  assert.ok(!onDisk.files['src/a.js'], 'files entry pruned from disk graph');
+});
+
+test('a mix of one deleted and one drifted file is reconciled in one pass', () => {
+  const d = tmpProject();
+  const aAbs = writeSrc(d, 'src/a.js', 'function goneA(){}\n');
+  const bAbs = writeSrc(d, 'src/b.js', 'function keepB(){}\n');
+  idx.indexFile(d, aAbs);
+  idx.indexFile(d, bAbs);
+  // Delete a.js; drift b.js (edit without re-indexing).
+  fs.unlinkSync(aAbs);
+  fs.writeFileSync(bAbs, 'function keepB(){}\nfunction newB(){}\n');
+
+  // A single query triggers refreshAnyDrifted once and must handle both.
+  assert.equal(q.where(d, 'newB'), 'src/b.js:2-2');   // drift re-indexed
+  assert.match(q.where(d, 'goneA'), /no data/);        // deletion pruned
+});
+
+test('no deleted/drifted files -> fast path, graph.json is not rewritten', () => {
+  const store = require('../hooks/graph-store');
+  const d = tmpProject();
+  idx.indexFile(d, writeSrc(d, 'src/a.js', 'function f(){}\n'));
+  const before = fs.statSync(store.graphPath(d)).mtimeMs;
+  const beforeJson = fs.readFileSync(store.graphPath(d), 'utf8');
+  // Nothing changed on disk since indexing -> refreshAnyDrifted must take the
+  // fast path with NO mutateGraph write.
+  assert.equal(q.where(d, 'f'), 'src/a.js:1-1');
+  const afterJson = fs.readFileSync(store.graphPath(d), 'utf8');
+  assert.equal(afterJson, beforeJson, 'graph.json content unchanged on fast path');
+  assert.equal(fs.statSync(store.graphPath(d)).mtimeMs, before, 'graph.json not rewritten on fast path');
+});
+
 test('CLI where prints the answer and exits 0', () => {
   const d = tmpProject();
   idx.indexFile(d, writeSrc(d, 'src/a.js', 'function f(){}\n'));

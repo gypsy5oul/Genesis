@@ -10,6 +10,19 @@ const lib = require('../hooks/sdlc-state');
 function tmpProject() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'sdlc-guard-'));
 }
+// Write a real docs/sdlc/state.json to disk so the transition check has an
+// OLD state to compare against. Returns the serialized text (handy when a
+// test needs to build an Edit whose old_string matches the on-disk bytes).
+function seedState(d, state) {
+  const p = lib.statePath(d);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  const text = JSON.stringify(state, null, 2) + '\n';
+  fs.writeFileSync(p, text);
+  return text;
+}
+function stateWith(stages) {
+  return { project: 'demo', currentStage: 'feasibility', stages };
+}
 function runGuard(payload) {
   return spawnSync(process.execPath, [path.join(__dirname, '..', 'hooks', 'sdlc-state-guard.js')], {
     input: typeof payload === 'string' ? payload : JSON.stringify(payload),
@@ -138,6 +151,118 @@ test('guard: allows a Bash command unrelated to state.json', () => {
   const r = runGuard({ cwd: d, tool_name: 'Bash', tool_input: { command: 'npm test' } });
   assert.equal(r.status, 0);
   assert.equal(deny(r), null);
+});
+
+// ---------------------------------------------------------------------------
+// Transition check (bug fix): a full-file rewrite that merely re-serializes an
+// already-approved PRIOR stage must NOT be denied; only a real
+// non-approved -> approved transition may be denied.
+// ---------------------------------------------------------------------------
+
+test('guard: ALLOWS full-file Write that keeps an already-approved prior stage and moves an unrelated stage to in-progress', () => {
+  const d = tmpProject();
+  seedState(d, stateWith({ requirements: { status: 'approved' }, feasibility: { status: 'pending' } }));
+  const newState = stateWith({ requirements: { status: 'approved' }, feasibility: { status: 'in-progress' } });
+  const r = runGuard({
+    cwd: d, tool_name: 'Write',
+    tool_input: { file_path: lib.statePath(d), content: JSON.stringify(newState, null, 2) + '\n' }
+  });
+  assert.equal(r.status, 0);
+  assert.equal(deny(r), null, 'unchanged already-approved prior stage must not trigger a deny');
+});
+
+test('guard: DENIES full-file Write that flips a stage from awaiting-approval to approved (genuine tamper)', () => {
+  const d = tmpProject();
+  seedState(d, stateWith({ requirements: { status: 'approved' }, feasibility: { status: 'awaiting-approval' } }));
+  const newState = stateWith({ requirements: { status: 'approved' }, feasibility: { status: 'approved' } });
+  const r = runGuard({
+    cwd: d, tool_name: 'Write',
+    tool_input: { file_path: lib.statePath(d), content: JSON.stringify(newState, null, 2) + '\n' }
+  });
+  assert.equal(r.status, 0);
+  assert.ok(deny(r), 'a real new approval must still be denied');
+});
+
+test('guard: ALLOWS Edit that moves an unrelated stage to in-progress while a prior stage stays approved', () => {
+  const d = tmpProject();
+  seedState(d, stateWith({ requirements: { status: 'approved' }, feasibility: { status: 'pending' } }));
+  const r = runGuard({
+    cwd: d, tool_name: 'Edit',
+    tool_input: { file_path: lib.statePath(d), old_string: '"status": "pending"', new_string: '"status": "in-progress"' }
+  });
+  assert.equal(r.status, 0);
+  assert.equal(deny(r), null, 'the already-approved requirements entry left in place must not deny the edit');
+});
+
+test('guard: DENIES Edit that flips a stage from awaiting-approval to approved on disk (genuine tamper)', () => {
+  const d = tmpProject();
+  seedState(d, stateWith({ requirements: { status: 'approved' }, feasibility: { status: 'awaiting-approval' } }));
+  const r = runGuard({
+    cwd: d, tool_name: 'Edit',
+    tool_input: { file_path: lib.statePath(d), old_string: '"status": "awaiting-approval"', new_string: '"status": "approved"' }
+  });
+  assert.equal(r.status, 0);
+  assert.ok(deny(r), 'a real new approval via Edit must still be denied');
+});
+
+test('guard: ALLOWS MultiEdit of only non-approval transitions while a prior stage stays approved', () => {
+  const d = tmpProject();
+  seedState(d, stateWith({ requirements: { status: 'approved' }, feasibility: { status: 'pending' } }));
+  const r = runGuard({
+    cwd: d, tool_name: 'MultiEdit',
+    tool_input: {
+      file_path: lib.statePath(d),
+      edits: [
+        { old_string: '"status": "pending"', new_string: '"status": "in-progress"' },
+        { old_string: '"currentStage": "feasibility"', new_string: '"currentStage": "feasibility"' }
+      ]
+    }
+  });
+  assert.equal(r.status, 0);
+  assert.equal(deny(r), null, 'no stage newly becomes approved, so allow');
+});
+
+test('guard: DENIES MultiEdit whose replacements flip a stage to approved on disk (genuine tamper)', () => {
+  const d = tmpProject();
+  seedState(d, stateWith({ requirements: { status: 'approved' }, feasibility: { status: 'awaiting-approval' } }));
+  const r = runGuard({
+    cwd: d, tool_name: 'MultiEdit',
+    tool_input: {
+      file_path: lib.statePath(d),
+      edits: [
+        { old_string: '"currentStage": "feasibility"', new_string: '"currentStage": "plan"' },
+        { old_string: '"status": "awaiting-approval"', new_string: '"status": "approved"' }
+      ]
+    }
+  });
+  assert.equal(r.status, 0);
+  assert.ok(deny(r), 'a real new approval via MultiEdit must still be denied');
+});
+
+test('guard: falls back to conservative check and DENIES a Write whose content is not valid JSON but contains an approved status', () => {
+  const d = tmpProject();
+  seedState(d, stateWith({ requirements: { status: 'approved' }, feasibility: { status: 'pending' } }));
+  const r = runGuard({
+    cwd: d, tool_name: 'Write',
+    // truncated / non-JSON content — cannot be parsed as the state shape, so
+    // the guard must not fail open: the conservative substring check applies.
+    tool_input: { file_path: lib.statePath(d), content: 'garbage not json {"status": "approved" ' }
+  });
+  assert.equal(r.status, 0);
+  assert.ok(deny(r), 'unparseable content mentioning an approved status must be denied conservatively');
+});
+
+test('guard: falls back to conservative check when an Edit old_string is absent from the on-disk file', () => {
+  const d = tmpProject();
+  seedState(d, stateWith({ requirements: { status: 'approved' }, feasibility: { status: 'pending' } }));
+  const r = runGuard({
+    cwd: d, tool_name: 'Edit',
+    // old_string does not exist on disk, so the edit can't be simulated —
+    // conservative check on new_string denies because it sets approved.
+    tool_input: { file_path: lib.statePath(d), old_string: 'THIS TEXT IS NOT PRESENT', new_string: '"status": "approved"' }
+  });
+  assert.equal(r.status, 0);
+  assert.ok(deny(r), 'unsimulatable edit introducing approved must be denied conservatively');
 });
 
 test('guard: exit 0 on garbage stdin', () => {

@@ -6,6 +6,7 @@ const { mutateGraph, readGraph } = require('./graph-store');
 const { parseFile, detectLang, readSourceSafe } = require('./graph-parse');
 const { scanMarkers } = require('./debt-scan');
 const { reconcileFileMarkers } = require('./debt-store');
+const { statePath } = require('./sdlc-state');
 
 function toRel(cwd, absFile) {
   return path.relative(cwd, absFile).split(path.sep).join('/');
@@ -171,6 +172,15 @@ function runHook() {
     try {
       const data = JSON.parse(input);
       const cwd = (data && typeof data.cwd === 'string') ? data.cwd : process.cwd();
+      // Gate: the automatic PostToolUse path only runs in a project that has
+      // actually been initialized with /genesis:init (i.e. docs/sdlc/state.json
+      // exists). Without this, editing any file in ANY project where the plugin
+      // is enabled would silently create docs/sdlc/graph.json + debt.json —
+      // surprise folders in repos that never opted into Genesis. The explicit
+      // CLI (--files) path stays ungated: it's only ever invoked deliberately by
+      // Genesis stage skills (including init's own baseline scan, which runs
+      // AFTER init has written state.json), so it must keep working regardless.
+      try { if (!fs.existsSync(statePath(cwd))) { process.exit(0); } } catch { process.exit(0); }
       const toolName = data && data.tool_name;
       const filePath = data && data.tool_input && data.tool_input.file_path;
       if (['Edit', 'Write', 'MultiEdit'].includes(toolName) && typeof filePath === 'string') {

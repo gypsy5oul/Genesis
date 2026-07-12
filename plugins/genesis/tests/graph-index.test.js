@@ -22,6 +22,17 @@ function runCli(args, input) {
     input: input || '', encoding: 'utf8', timeout: 5000
   });
 }
+// Writes a minimal valid docs/sdlc/state.json — the marker /genesis:init drops
+// to signal "this project is Genesis-managed", which the PostToolUse hook now
+// gates on.
+function writeState(d) {
+  const abs = path.join(d, 'docs', 'sdlc', 'state.json');
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, JSON.stringify({
+    version: 1, project: 'p', idea: 'x', currentStage: 'requirements', stages: {}, decisions: []
+  }, null, 2) + '\n');
+  return abs;
+}
 
 test('indexFile adds nodes/edges for a new file', () => {
   const d = tmpProject();
@@ -125,9 +136,53 @@ test('CLI --files mode indexes multiple files', () => {
 
 test('hook mode indexes the file named in tool_input.file_path for an Edit/Write/MultiEdit tool', () => {
   const d = tmpProject();
+  writeState(d); // hook path is gated on a Genesis project having been initialized
   const abs = writeSrc(d, 'src/a.js', 'function f(){}\n');
   const r = runCli([], JSON.stringify({ cwd: d, tool_name: 'Write', tool_input: { file_path: abs } }));
   assert.equal(r.status, 0);
+  assert.equal(store.readGraph(d).nodes.length, 1);
+});
+
+test('hook mode no-ops (writes neither graph.json nor debt.json) when the project has no docs/sdlc/state.json', () => {
+  const d = tmpProject();
+  // A file carrying a genesis: debt marker — proves BOTH the code-graph and the
+  // debt-scan paths stay untouched, not just one of them.
+  const abs = writeSrc(d, 'src/a.js', 'function f(){}\n// genesis: hack, fix later\n');
+  const r = runCli([], JSON.stringify({ cwd: d, tool_name: 'Write', tool_input: { file_path: abs } }));
+  assert.equal(r.status, 0);
+  assert.equal(fs.existsSync(store.graphPath(d)), false, 'graph.json must not be created in a non-Genesis project');
+  assert.equal(fs.existsSync(require('../hooks/debt-store').debtPath(d)), false, 'debt.json must not be created in a non-Genesis project');
+});
+
+test('hook mode indexes normally (graph.json AND debt.json both written) once docs/sdlc/state.json exists', () => {
+  const d = tmpProject();
+  writeState(d);
+  const abs = writeSrc(d, 'src/a.js', 'function f(){}\n// genesis: hack, fix later\n');
+  const r = runCli([], JSON.stringify({ cwd: d, tool_name: 'Write', tool_input: { file_path: abs } }));
+  assert.equal(r.status, 0);
+  assert.equal(store.readGraph(d).nodes.length, 1, 'code graph must still be built for a Genesis project');
+  assert.equal(store.readGraph(d).nodes[0].name, 'f');
+  const debtStore = require('../hooks/debt-store');
+  assert.equal(debtStore.readDebt(d).items.length, 1, 'debt marker must still be reconciled for a Genesis project');
+});
+
+test('CLI --files path is UNAFFECTED by the state.json gate (still indexes without state.json)', () => {
+  const d = tmpProject();
+  writeSrc(d, 'src/a.js', 'function f(){}\n');
+  writeSrc(d, 'src/b.js', 'function g(){}\n');
+  // No docs/sdlc/state.json — this is exactly the case init's own baseline scan
+  // runs in before state.json is considered "set up"; it must still work.
+  const r = runCli(['--files', 'src/a.js', 'src/b.js', '--cwd', d]);
+  assert.equal(r.status, 0);
+  assert.equal(store.readGraph(d).nodes.length, 2, 'explicit CLI path must index regardless of state.json');
+});
+
+test('indexFile() direct call is UNAFFECTED by the state.json gate (only runHook is gated)', () => {
+  const d = tmpProject();
+  const abs = writeSrc(d, 'src/a.js', 'function f(){}\n');
+  const r = idx.indexFile(d, abs); // no state.json present
+  assert.equal(r.ok, true);
+  assert.equal(r.updated, true);
   assert.equal(store.readGraph(d).nodes.length, 1);
 });
 

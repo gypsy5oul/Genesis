@@ -19,7 +19,7 @@ Read `../_shared/graph-protocol.md` first.
    - "what calls X" / "who uses X" → `callers`
    - "what does <file> import" → `imports`
    - "what would break if I change <file>" / "what depends on <file>" → `impact`
-3. Run the query via Bash: `node <plugin root>/hooks/graph-query.js <verb> <target>`.
+3. Run the query via Bash: `node ${CLAUDE_PLUGIN_ROOT}/hooks/graph-query.js <verb> <target>`.
    Multiple candidates (e.g. the question names something ambiguous) →
    run more than one query rather than guessing.
 4. Answer from the query's actual output only. Cite `file:line`. A `no data`/

@@ -27,10 +27,10 @@ imports, same-file calls. Not a semantic/concept graph — "where is X" and
 ## Querying (any stage, any agent — zero model tokens)
 
 ```
-node <plugin root>/hooks/graph-query.js where <name>       # file:line-line
-node <plugin root>/hooks/graph-query.js callers <name>     # who calls it
-node <plugin root>/hooks/graph-query.js imports <relFile>  # what it imports
-node <plugin root>/hooks/graph-query.js impact <relFile>   # who imports it
+node ${CLAUDE_PLUGIN_ROOT}/hooks/graph-query.js where <name>       # file:line-line
+node ${CLAUDE_PLUGIN_ROOT}/hooks/graph-query.js callers <name>     # who calls it
+node ${CLAUDE_PLUGIN_ROOT}/hooks/graph-query.js imports <relFile>  # what it imports
+node ${CLAUDE_PLUGIN_ROOT}/hooks/graph-query.js impact <relFile>   # who imports it
 ```
 
 Run via Bash from the target project's root (or pass `--cwd <dir>`). Output

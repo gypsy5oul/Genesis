@@ -4,7 +4,7 @@ Spec §4. Applies to every stage artifact and every code change.
 
 1. **Draft** — lead agent produces the artifact. Opus persona for thinking stages (requirements→design), sonnet for build stages (develop→maintain).
 2. **Senior review** — spawn `code-reviewer` (code) or the stage's second discipline agent (documents), prompted adversarially: find gaps, contradictions, missing cases. Severity per finding: **Critical / Required / Nit / FYI** — one line each: `severity | location | problem | fix`. No praise.
-3. **Fix** — drafter addresses Critical + Required. Max 2 rounds; unresolved items go verbatim into the gate summary.
+3. **Fix** — drafter addresses Critical + Required. For code changes driven by the `develop`/`test` workflow scripts specifically, this is a single fix + re-verify pass, not a loop (the scripts run exactly one fix-then-reverify cycle). For document-artifact stages and the main session's own manual test-failure routing, up to 2 rounds remains the guideline. Unresolved items go verbatim into the gate summary.
 4. **Chores** — `junior-assistant` (haiku): formatting, ToC, changelog line. Anything scriptable (state edits, indexes) is done by the main session directly — $0 tier before haiku (spec §11.9).
 
 Gate rule: any unresolved **Critical** → gate summary says `NO-GO recommended` and why. Human can still approve — their risk to accept.

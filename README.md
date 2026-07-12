@@ -94,7 +94,7 @@ Codegraph has no dedicated command — ask about your code in plain English and 
 
 - Thinking stages (1–4) are cheap: a few model calls each. Development and testing scale with your app: one builder + one reviewer per task, run in parallel.
 - Status, approvals, state updates, session briefings, the code graph, and usage tracking are all pure Node hooks — **zero model tokens**, and none of them can be hallucinated.
-- Agents talk to each other in compressed, contract-fixed formats (~60% smaller); everything written for *you* is normal prose.
+- Agents talk to each other in compressed, contract-fixed formats that are terser than human-facing prose; everything written for *you* is normal prose.
 - Later stages read an index of earlier artifacts and pull full documents only when needed; code questions read the code graph instead of re-exploring the tree.
 
 ## Safety rails

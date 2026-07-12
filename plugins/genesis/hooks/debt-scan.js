@@ -6,6 +6,10 @@
 // cover every builder role this feature ships for today (Python/shell,
 // JS/TS, SQL); add another prefix here if a project's marker goes
 // unrecognized, don't build a general comment-syntax parser for it.
+// Known limitation (accepted, not fixed here): this regex can false-
+// positive-match a `genesis:` substring inside a URL in a comment (e.g. a
+// comment containing "genesis:8080") as if it were a real marker — the same
+// limitation the ponytail project's own grep-based marker convention has.
 const MARKER_RE = /(?:#|\/\/|--)\s*genesis:\s*(.*)$/;
 
 // A marker's body is `<ceiling>, <upgrade trigger>` (ponytail's own

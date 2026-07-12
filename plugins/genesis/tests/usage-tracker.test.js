@@ -134,7 +134,7 @@ test('renderLine formats session + weekly with cost when known', () => {
     { inputTokens: 10000, outputTokens: 2400, cacheCreationTokens: 0, cacheReadTokens: 0, estUsd: 0.19 },
     { inputTokens: 80000, outputTokens: 4000, cacheCreationTokens: 0, cacheReadTokens: 0, estUsd: 1.26 }
   );
-  assert.match(line, /^\[GENESIS\] 12\.4k tok ~\$0\.19 today \| 84k tok ~\$1\.26 wk$/);
+  assert.match(line, /^\[GENESIS\] 12\.4k tok ~\$0\.19 session \| 84k tok ~\$1\.26 wk$/);
 });
 
 test('renderLine omits cost when unknown, still shows tokens', () => {
@@ -142,7 +142,7 @@ test('renderLine omits cost when unknown, still shows tokens', () => {
     { inputTokens: 100, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, estUsd: null },
     { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, estUsd: null }
   );
-  assert.match(line, /^\[GENESIS\] 100 tok today \| 0 tok wk$/);
+  assert.match(line, /^\[GENESIS\] 100 tok session \| 0 tok wk$/);
 });
 
 test('renderLine returns empty string when there is nothing to show', () => {

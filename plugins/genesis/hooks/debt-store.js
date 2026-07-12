@@ -50,6 +50,10 @@ function mutateDebt(cwd, mutator) {
 // lets a later report show how long a shortcut has been outstanding,
 // instead of resetting the clock on every touch of the file. Anything new
 // or changed gets today's timestamp.
+// Accepted tradeoff of line-based keying (not fixed here): because rows are
+// keyed by (file, line), an edit that shifts a marker to a different line
+// number (by adding/removing lines above it) is treated as a new row and
+// resets its addedAt, even though it's the same deliberate shortcut.
 function reconcileFileMarkers(cwd, relFile, found) {
   return mutateDebt(cwd, (debt) => {
     const others = debt.items.filter((it) => it.file !== relFile);

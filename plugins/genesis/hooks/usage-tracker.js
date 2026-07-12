@@ -165,7 +165,7 @@ function renderLine(session, weekly) {
   if (sessionTotal <= 0 && weeklyTotal <= 0) return '';
   const sessionCost = session.estUsd != null ? ` ~${formatUsd(session.estUsd)}` : '';
   const weeklyCost = weekly.estUsd != null ? ` ~${formatUsd(weekly.estUsd)}` : '';
-  return `[GENESIS] ${humanizeTokens(sessionTotal)} tok${sessionCost} today | ${humanizeTokens(weeklyTotal)} tok${weeklyCost} wk`;
+  return `[GENESIS] ${humanizeTokens(sessionTotal)} tok${sessionCost} session | ${humanizeTokens(weeklyTotal)} tok${weeklyCost} wk`;
 }
 
 function main() {

@@ -15,7 +15,7 @@ A gated 10-stage software lifecycle for developing real applications: 11 special
 
 Everything else — stage gates, approvals, the review loop, and the `genesis:` debt-marker ledger — works without it. A one-time SessionStart notice reminds you if the code graph is off.
 
-Local dev: clone this repo, run `npm install` at the repo root (a `postinstall` step installs the plugin's own native deps), then run Claude Code with `--plugin-dir /opt/claude-skills/plugins/genesis`.
+Local dev: clone this repo, run `npm install` at the repo root (a `postinstall` step installs the plugin's own native deps), then run Claude Code with `--plugin-dir <path-to-your-clone>/plugins/genesis`.
 
 ## Usage
 
@@ -43,6 +43,7 @@ Local dev: clone this repo, run `npm install` at the repo root (a `postinstall` 
 - Thinking stages (1–4): cheap — 2-4 opus/sonnet calls each. `--panel` on design adds ~5 opus calls.
 - develop/test: expensive — one builder + one reviewer (+ fix round) per task/module, parallel.
 - status/approvals/state: $0 (hooks). init: $0 (no agents).
+- Usage/cost tracking: opt-in statusline showing per-session + rolling-7-day token totals and estimated USD, recomputed each turn by a Stop hook — $0 model tokens.
 
 ## Health metrics (is it working?)
 
@@ -53,4 +54,4 @@ Local dev: clone this repo, run `npm install` at the repo root (a `postinstall` 
 
 ## Layout
 
-agents/ (11 roles) · skills/ (12 stages + _shared protocols) · hooks/ (2 zero-token hooks + state lib) · workflows/ (develop, test, design-panel) · evals/ (structural validator) · tests/ (node --test)
+agents/ (11 roles) · skills/ (12 stages + _shared protocols) · hooks/ (state machine, code graph, debt ledger, usage tracking — all zero model tokens) · workflows/ (develop, test, design-panel) · evals/ (structural validator) · tests/ (node --test)

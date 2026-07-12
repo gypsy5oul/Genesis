@@ -17,7 +17,7 @@ function run(configDir) {
 
 test('prints the pre-rendered line when present', () => {
   const d = tmpConfigDir();
-  fs.writeFileSync(path.join(d, '.genesis-usage-line'), '[GENESIS] 12.4k tok ~$0.19 today | 84k tok ~$1.26 wk');
+  fs.writeFileSync(path.join(d, '.genesis-usage-line'), '[GENESIS] 12.4k tok ~$0.19 session | 84k tok ~$1.26 wk');
   const r = run(d);
   assert.equal(r.status, 0);
   assert.match(r.stdout, /\[GENESIS\] 12\.4k tok/);

@@ -2,10 +2,26 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const Parser = require('tree-sitter');
-const JavaScript = require('tree-sitter-javascript');
-const TypeScriptGrammars = require('tree-sitter-typescript');
-const Python = require('tree-sitter-python');
+// tree-sitter and its grammars are NATIVE modules (node-gyp build step). A
+// real marketplace install runs NO `npm install`, so on a fresh install they
+// may be unresolvable. Requiring this file must therefore NEVER throw at load
+// time: graph-index.js (the PostToolUse hook body) requires it, and the
+// debt-marker reconciliation path in graph-index.js is entirely independent
+// of tree-sitter — it must keep working with or without the grammars present.
+// When the grammars are unavailable these stay null; grammarFor() then returns
+// null for every language and parseFile() returns null (codegraph silently
+// does nothing) — the exact same graceful no-op path used today for an
+// unrecognized language / unsupported extension, not an error or a crash.
+let Parser = null;
+let JavaScript = null;
+let TypeScriptGrammars = null;
+let Python = null;
+try {
+  Parser = require('tree-sitter');
+  JavaScript = require('tree-sitter-javascript');
+  TypeScriptGrammars = require('tree-sitter-typescript');
+  Python = require('tree-sitter-python');
+} catch { /* native grammars unavailable — codegraph disabled, everything else works */ }
 const { MAX_FILE_BYTES } = require('./graph-store');
 const { extractPythonTree } = require('./graph-parse-python');
 
@@ -18,10 +34,19 @@ function detectLang(relFile) {
   return null;
 }
 
+// Returns null both for an unrecognized lang AND whenever the native grammars
+// couldn't be loaded — the TypeScriptGrammars guard is what keeps this from
+// throwing on `.typescript`/`.tsx` when the module is null. Callers already
+// treat a null grammar as "can't parse this", so no caller needs to
+// distinguish "unknown language" from "grammars not installed".
+function grammarsAvailable() {
+  return !!(Parser && JavaScript && TypeScriptGrammars && Python);
+}
+
 function grammarFor(lang) {
   if (lang === 'javascript') return JavaScript;
-  if (lang === 'typescript') return TypeScriptGrammars.typescript;
-  if (lang === 'tsx') return TypeScriptGrammars.tsx;
+  if (lang === 'typescript') return TypeScriptGrammars ? TypeScriptGrammars.typescript : null;
+  if (lang === 'tsx') return TypeScriptGrammars ? TypeScriptGrammars.tsx : null;
   if (lang === 'python') return Python;
   return null;
 }
@@ -275,6 +300,10 @@ function parseFile(absPath, relFile) {
   const lang = detectLang(relFile);
   if (!lang) return null;
   const grammar = grammarFor(lang);
+  // No grammar (unknown language, OR the native tree-sitter modules aren't
+  // installed) → return null exactly as for an unsupported extension. This is
+  // the graceful-degradation path: codegraph records nothing, no throw.
+  if (!Parser || !grammar) return null;
   const source = readSourceSafe(absPath);
   if (source === null) return null;
   const parser = new Parser();
@@ -289,5 +318,5 @@ function parseFile(absPath, relFile) {
 }
 
 module.exports = {
-  detectLang, grammarFor, extractFromTree, resolveImportTarget, stripQuotes, parseFile, readSourceSafe,
+  detectLang, grammarFor, grammarsAvailable, extractFromTree, resolveImportTarget, stripQuotes, parseFile, readSourceSafe,
 };

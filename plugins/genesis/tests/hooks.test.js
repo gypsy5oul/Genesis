@@ -100,6 +100,15 @@ test('session-start: strips control characters from the statusline command befor
   assert.match(r.stdout, /caveman-statusline\.sh/);
 });
 
+test('session-start: no codegraph notice when the tree-sitter grammars ARE available (no nagging in the normal case)', () => {
+  // This suite runs with the real grammars installed (plugins/genesis/node_modules),
+  // so grammarsAvailable() is true and the one-time notice must never fire.
+  const sessionStart = require('../hooks/sdlc-session-start');
+  const d = tmpProject(base());
+  assert.equal(sessionStart.codegraphNotice(d, true), null);
+  assert.ok(!fs.existsSync(sessionStart.codegraphNoticePath(d)), 'no marker should be written when nothing was shown');
+});
+
 test('prompt: blocks /genesis:status with rendered board', () => {
   const out = JSON.parse(runHook('sdlc-prompt-hook.js', { cwd: tmpProject(base()), prompt: '/genesis:status' }).stdout);
   assert.equal(out.decision, 'block');

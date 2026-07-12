@@ -1,13 +1,9 @@
 {
   "name": "genesis",
   "private": true,
-  "dependencies": {
-    "tree-sitter": "^0.21.1",
-    "tree-sitter-javascript": "0.23.1",
-    "tree-sitter-typescript": "0.23.2",
-    "tree-sitter-python": "0.21.0"
-  },
+  "comment": "Runtime deps (tree-sitter*) live in plugins/genesis/package.json — that is the only directory a marketplace install ships. Node's require() from plugins/genesis/hooks/*.js resolves them there. The postinstall below installs them on a normal repo-root `npm install` (dev/CI only — a real marketplace install runs no npm install at all, so it is inert for end users).",
   "scripts": {
+    "postinstall": "npm install --prefix plugins/genesis",
     "test": "node --test plugins/genesis/tests/*.test.js",
     "validate": "node plugins/genesis/evals/validate-structure.js",
     "smoke": "bash plugins/genesis/evals/smoke.sh"

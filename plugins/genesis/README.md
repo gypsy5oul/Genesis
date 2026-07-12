@@ -9,7 +9,13 @@ A gated 10-stage software lifecycle for developing real applications: 11 special
 /plugin marketplace add https://github.com/gypsy5oul/Genesis
 /plugin install genesis@claude-skills
 
-Local dev: clone this repo, run Claude Code with `--plugin-dir /opt/claude-skills/plugins/genesis`.
+**Code graph (optional, one command).** The structural code graph relies on native `tree-sitter` parsers that a marketplace install can't build automatically. Enable it once, then restart the session:
+
+    npm install --prefix "$CLAUDE_PLUGIN_ROOT"
+
+Everything else — stage gates, approvals, the review loop, and the `genesis:` debt-marker ledger — works without it. A one-time SessionStart notice reminds you if the code graph is off.
+
+Local dev: clone this repo, run `npm install` at the repo root (a `postinstall` step installs the plugin's own native deps), then run Claude Code with `--plugin-dir /opt/claude-skills/plugins/genesis`.
 
 ## Usage
 

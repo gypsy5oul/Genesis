@@ -1,0 +1,11 @@
+{
+  "name": "genesis-plugin",
+  "private": true,
+  "description": "Runtime native dependencies for Genesis codegraph. These live here (not at the repo root) because only this directory ships to a marketplace install; run `npm install` here once to enable the code graph + debt ledger.",
+  "dependencies": {
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-javascript": "0.23.1",
+    "tree-sitter-typescript": "0.23.2",
+    "tree-sitter-python": "0.21.0"
+  }
+}

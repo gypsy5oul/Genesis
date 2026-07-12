@@ -23,6 +23,14 @@ Genesis is a Claude Code plugin for developing and shipping real applications wi
 
 Then in any project: `/genesis:init` and follow the stages.
 
+**One optional step for the code graph.** The structural code graph (the "what breaks if I change this file" index) is powered by native `tree-sitter` parsers, which a marketplace install can't build for you. To turn it on, run this once inside the installed plugin directory, then restart the session:
+
+```
+npm install --prefix "$CLAUDE_PLUGIN_ROOT"
+```
+
+Everything else works without it — stage gates, approvals, the adversarial review loop, and the `genesis:` debt-marker ledger all run normally; only the code graph waits on that one command. A one-time session notice reminds you if it's off.
+
 ## Why Genesis instead of just prompting?
 
 Prompting an agent "build me X" produces code with no requirements trail, no design decisions on record, no independent review, no map of what already exists, and no way to pick up where you left off. Genesis fixes each of those:

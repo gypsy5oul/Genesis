@@ -244,3 +244,50 @@ test('CLI does NOT prepend a warning line when no oversized status marker is pre
   assert.doesNotMatch(r.stdout, /WARNING/);
   assert.equal(r.stdout.trim(), 'src/a.js:1-1');
 });
+
+test('one drift pass handles deleted / drifted / unchanged files each correctly (three-way mix)', () => {
+  const d = tmpProject();
+  const delAbs = writeSrc(d, 'src/del.js', 'function toDelete(){}\n');
+  const driftAbs = writeSrc(d, 'src/drift.js', 'function keep(){}\n');
+  const sameAbs = writeSrc(d, 'src/same.js', 'function stable(){}\n');
+  idx.indexFile(d, delAbs);
+  idx.indexFile(d, driftAbs);
+  idx.indexFile(d, sameAbs);
+  // Mutate disk WITHOUT re-indexing: delete one, drift one, leave one untouched.
+  fs.unlinkSync(delAbs);
+  fs.writeFileSync(driftAbs, 'function keep(){}\nfunction added(){}\n');
+
+  // A single query drives one refreshAnyDrifted pass that must resolve all three.
+  assert.match(q.where(d, 'toDelete'), /no data/);       // deleted -> pruned
+  assert.equal(q.where(d, 'added'), 'src/drift.js:2-2');  // drifted -> re-parsed
+  assert.equal(q.where(d, 'stable'), 'src/same.js:1-1');  // unchanged -> left alone
+
+  const g = require('../hooks/graph-store').readGraph(d);
+  assert.ok(!g.files['src/del.js'], 'deleted file entry removed');
+  assert.ok(g.files['src/drift.js'], 'drifted file still tracked');
+  assert.ok(g.files['src/same.js'], 'unchanged file still tracked');
+});
+
+test('pruning N deleted files in one pass does exactly ONE graph write (batched, not N)', () => {
+  const store = require('../hooks/graph-store');
+  const d = tmpProject();
+  const abs = [
+    writeSrc(d, 'src/a.js', 'function a(){}\n'),
+    writeSrc(d, 'src/b.js', 'function b(){}\n'),
+    writeSrc(d, 'src/c.js', 'function c(){}\n'),
+  ];
+  for (const a of abs) idx.indexFile(d, a);
+  for (const a of abs) fs.unlinkSync(a); // three tracked files vanish at once
+
+  // writeFileSafe commits every graph write with an atomic rename onto graphPath;
+  // count those to prove all three deletions collapse into a single mutateGraph.
+  const realRename = fs.renameSync;
+  let writes = 0;
+  fs.renameSync = (from, to) => { if (to === store.graphPath(d)) writes++; return realRename(from, to); };
+  try {
+    q.refreshAnyDrifted(d, store.readGraph(d));
+  } finally {
+    fs.renameSync = realRename;
+  }
+  assert.equal(writes, 1, 'all deleted files must be pruned in a single batched graph write');
+});

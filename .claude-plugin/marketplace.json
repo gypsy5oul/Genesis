@@ -6,7 +6,7 @@
       "name": "genesis",
       "source": "./plugins/genesis",
       "description": "Build production-ready software from idea to deployment: gated 10-stage SDLC, adversarial reviews on every artifact, role agents tiered opus/sonnet/haiku.",
-      "version": "0.1.0"
+      "version": "0.2.0"
     }
   ]
 }

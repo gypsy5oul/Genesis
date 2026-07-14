@@ -43,7 +43,7 @@ Local dev: clone this repo, run `npm install` at the repo root (a `postinstall` 
 - Thinking stages (1–4): cheap — 2-4 opus/sonnet calls each. `--panel` on design adds ~5 opus calls.
 - develop/test: expensive — one builder + one reviewer (+ fix round) per task/module, parallel.
 - status/approvals/state: $0 (hooks). init: $0 (no agents).
-- Usage/cost tracking: opt-in statusline showing per-session + rolling-7-day token totals and estimated USD, recomputed each turn by a Stop hook — $0 model tokens.
+- Usage tracking: opt-in statusline showing real 5-hour + weekly Claude plan usage % (color-coded) plus current model name, read live from Claude Code's own statusline JSON — $0 model tokens.
 
 ## Health metrics (is it working?)
 

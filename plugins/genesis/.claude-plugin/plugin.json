@@ -1,6 +1,6 @@
 {
   "name": "genesis",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Build production-ready software from idea to deployment. Gated 10-stage SDLC; stage skills orchestrate 11 role agents; state lives in the target project's docs/sdlc/state.json; approvals and status are zero-token hooks.",
   "author": { "name": "gypsy5oul", "email": "vishnuraveendran@gmail.com", "url": "https://github.com/gypsy5oul" },
   "hooks": {

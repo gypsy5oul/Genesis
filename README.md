@@ -31,6 +31,14 @@ npm install --prefix "$CLAUDE_PLUGIN_ROOT"
 
 Everything else works without it — stage gates, approvals, the adversarial review loop, and the `genesis:` debt-marker ledger all run normally; only the code graph waits on that one command. A one-time session notice reminds you if it's off.
 
+**Turn on live usage tracking (optional, one nudge).** A plugin install can't set your `statusLine` for you — that's a Claude Code setting only you (via a manual `~/.claude/settings.json` edit, or the `/statusline` slash command) can configure; plugins can only pre-configure `agent`/`subagentStatusLine`. Genesis works around this the easy way: the first time you start a session with it installed, a SessionStart nudge offers to set it up for you — just say yes. To do it yourself instead, run Claude Code's own built-in setup command:
+
+```
+/statusline use the script at <path-to-installed-plugin>/hooks/usage-statusline.sh
+```
+
+Find `<path-to-installed-plugin>` with `claude plugin list`, or from inside a session, `$CLAUDE_PLUGIN_ROOT` (don't hardcode a version number in the path — it changes as the plugin updates).
+
 ## Why Genesis instead of just prompting?
 
 Prompting an agent "build me X" produces code with no requirements trail, no design decisions on record, no independent review, no map of what already exists, and no way to pick up where you left off. Genesis fixes each of those:
@@ -63,12 +71,13 @@ Every Genesis project gets its own structural code graph (`docs/sdlc/graph.json`
 - **Ask in plain English.** A `codegraph` skill triggers automatically on questions shaped like the above — you don't need to remember a command.
 - **Scope, honestly stated:** JS/TS/TSX and Python in v1 (no Go yet); only relative imports resolve to a file (bare package imports like `react` don't); only same-file, plain-function calls resolve (`obj.method()`/`this.method()` calls are out of scope, by design, rather than guessed at and sometimes wrong). Where the graph can't determine an answer, it says so — it never fabricates a location or a caller.
 
-## Live cost & usage tracking
+## Live usage tracking
 
-Opt-in statusline (`~/.claude/settings.json`) showing session + rolling-7-day token usage and an estimated USD cost, recomputed automatically after every turn — no command to run, no stale number.
+Opt-in statusline (`~/.claude/settings.json`) showing your real Claude subscription plan usage — not a token or dollar estimate.
 
-- A `Stop`-event hook reads the turn's own transcript, sums all four token categories (input, output, cache-write, cache-read — not output-only, since input and cache tokens usually dominate an agentic session), and appends a running snapshot to a small local history log.
-- Cost is estimated from a per-model price table — approximate, flagged as such, and will need updating as Anthropic's pricing changes; never presented as an exact bill.
+- Two independently color-coded bars: the 5-hour rolling-window % and the weekly %, each green under 70%, yellow 70-89%, red 90%+ — plus the current model's display name.
+- Sourced directly from Claude Code's own statusline JSON payload (`rate_limits.five_hour.used_percentage`, `rate_limits.seven_day.used_percentage`, `model.display_name`) on every render — Genesis doesn't compute it from the transcript or guess at cost.
+- Requires ANSI color support in your terminal, same as any other Claude Code statusline.
 - A SessionStart nudge offers to set the statusline up the first time it's unset, and keeps offering each session until you do — Genesis never overwrites an existing statusline (yours, or another plugin's) without asking first.
 
 ## Commands

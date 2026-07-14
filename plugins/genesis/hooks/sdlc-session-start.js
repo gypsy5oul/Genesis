@@ -62,7 +62,7 @@ function statuslineNudge() {
     try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch { /* unset or unreadable */ }
     const current = settings && settings.statusLine && settings.statusLine.command;
     if (!current) {
-      return 'Genesis can show live session/weekly token usage + est. cost in your statusline (currently unset) — offer to set it up.';
+      return 'Genesis can show live Claude plan usage (5-hour rolling window % and weekly %, color-coded) plus the current model name in your statusline (currently unset) — offer to set it up.';
     }
     if (current.includes('usage-statusline.sh')) {
       return null;

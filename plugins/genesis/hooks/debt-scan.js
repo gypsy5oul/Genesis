@@ -10,7 +10,15 @@
 // positive-match a `genesis:` substring inside a URL in a comment (e.g. a
 // comment containing "genesis:8080") as if it were a real marker — the same
 // limitation the ponytail project's own grep-based marker convention has.
-const MARKER_RE = /(?:#|\/\/|--)\s*genesis:\s*(.*)$/;
+// Group 1 captures which prefix matched — needed by scanMarkers to decide
+// whether a following comment-continuation line uses the SAME comment style.
+const MARKER_RE = /(#|\/\/|--)\s*genesis:\s*(.*)$/;
+
+// Pragmatic bound on how many continuation lines scanMarkers will merge into
+// a single marker's body. Not derived from any spec — just enough to cover a
+// realistic hand-written multi-line explanation without risking swallowing an
+// entire unrelated trailing block of same-style comments.
+const MAX_CONTINUATION_LINES = 10;
 
 // A marker's body is `<ceiling>, <upgrade trigger>` (ponytail's own
 // convention: the ceiling names the corner cut, the trigger names when to
@@ -30,17 +38,40 @@ function parseMarkerBody(body) {
 }
 
 // Scans raw file text for genesis: debt markers, one result per matching
-// line (1-indexed, matching graph-parse.js's own node `lines` convention).
-// Pure text scan — deliberately not tied to tree-sitter or any language's
-// grammar, so it works on any file type a builder might touch, including
-// ones the code graph itself skips (YAML, Go, etc.).
+// marker (1-indexed on its STARTING line, matching graph-parse.js's own node
+// `lines` convention). Pure text scan — deliberately not tied to tree-sitter
+// or any language's grammar, so it works on any file type a builder might
+// touch, including ones the code graph itself skips (YAML, Go, etc.).
+//
+// A marker's body can span multiple physical comment lines — a builder
+// writing a longer ceiling/trigger explanation naturally wraps it across a
+// few continuation lines with no `genesis:` prefix of their own. Immediately
+// following lines are merged (space-joined) into the marker's body as long as
+// each one is non-blank, uses the EXACT SAME comment prefix as the marker
+// itself, and doesn't start a new `genesis:` marker of its own. The first
+// line that fails any of those checks ends the body right there.
 function scanMarkers(source) {
   const found = [];
   const lines = source.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(MARKER_RE);
     if (!m) continue;
-    found.push({ line: i + 1, ...parseMarkerBody(m[1]) });
+    const prefix = m[1];
+    const bodyParts = [m[2]];
+    let j = i + 1;
+    let mergedCount = 0;
+    while (j < lines.length && mergedCount < MAX_CONTINUATION_LINES) {
+      const line = lines[j];
+      if (line.trim() === '') break; // blank line ends the body
+      const trimmed = line.replace(/^\s+/, '');
+      if (!trimmed.startsWith(prefix)) break; // different/no comment prefix
+      if (MARKER_RE.test(line)) break; // a new genesis: marker starts fresh
+      bodyParts.push(trimmed.slice(prefix.length).trim());
+      mergedCount++;
+      j++;
+    }
+    found.push({ line: i + 1, ...parseMarkerBody(bodyParts.join(' ')) });
+    i = j - 1; // skip past merged continuation lines, already consumed
   }
   return found;
 }

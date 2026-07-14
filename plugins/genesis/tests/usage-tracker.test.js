@@ -345,3 +345,55 @@ test('hook mode: does not append a history entry when the transcript has zero as
   assert.equal(r.status, 0);
   assert.equal(fs.existsSync(path.join(configDir, ut.HISTORY_BASENAME)), false);
 });
+
+test('reapStaleLineFiles unlinks per-session line files older than the given window, keeps fresh ones', () => {
+  const d = tmpConfigDir();
+  const now = Date.now();
+  const staleOld = path.join(d, `${ut.LINE_BASENAME_PREFIX}stale-old`);
+  const staleOlder = path.join(d, `${ut.LINE_BASENAME_PREFIX}stale-older`);
+  const fresh = path.join(d, `${ut.LINE_BASENAME_PREFIX}fresh`);
+  fs.writeFileSync(staleOld, '[GENESIS] old');
+  fs.writeFileSync(staleOlder, '[GENESIS] older');
+  fs.writeFileSync(fresh, '[GENESIS] fresh');
+  const staleTime = (now - ut.WEEK_MS - 60_000) / 1000;
+  fs.utimesSync(staleOld, staleTime, staleTime);
+  fs.utimesSync(staleOlder, staleTime, staleTime);
+
+  ut.reapStaleLineFiles(d, ut.WEEK_MS, now);
+
+  assert.equal(fs.existsSync(staleOld), false);
+  assert.equal(fs.existsSync(staleOlder), false);
+  assert.equal(fs.existsSync(fresh), true);
+});
+
+test('reapStaleLineFiles never throws even if the directory is missing', () => {
+  assert.doesNotThrow(() => ut.reapStaleLineFiles('/nonexistent/genesis-config-dir', ut.WEEK_MS, Date.now()));
+});
+
+test('hook mode: Stop-hook run reaps stale per-session line files (older than the weekly horizon) while keeping the fresh one and the just-written current session line', () => {
+  const configDir = tmpConfigDir();
+
+  // Pre-existing stale per-session line files from long-abandoned sessions.
+  const staleA = path.join(configDir, `${ut.LINE_BASENAME_PREFIX}old-session-a`);
+  const staleB = path.join(configDir, `${ut.LINE_BASENAME_PREFIX}old-session-b`);
+  fs.writeFileSync(staleA, '[GENESIS] 1k tok session | 1k tok wk');
+  fs.writeFileSync(staleB, '[GENESIS] 2k tok session | 2k tok wk');
+  const staleTime = (Date.now() - ut.WEEK_MS - 60_000) / 1000;
+  fs.utimesSync(staleA, staleTime, staleTime);
+  fs.utimesSync(staleB, staleTime, staleTime);
+
+  // A fresh pre-existing per-session line file that must survive the reap.
+  const fresh = path.join(configDir, `${ut.LINE_BASENAME_PREFIX}fresh-session`);
+  fs.writeFileSync(fresh, '[GENESIS] 3k tok session | 3k tok wk');
+
+  const transcript = writeTranscript(configDir, [
+    assistantMsg({ input_tokens: 1000, output_tokens: 100, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }),
+  ]);
+  const r = runHook(configDir, { session_id: 'current-session', transcript_path: transcript, cwd: configDir });
+  assert.equal(r.status, 0);
+
+  assert.equal(fs.existsSync(staleA), false, 'stale session-a line file must be reaped');
+  assert.equal(fs.existsSync(staleB), false, 'stale session-b line file must be reaped');
+  assert.equal(fs.existsSync(fresh), true, 'fresh pre-existing line file must survive the reap');
+  assert.equal(fs.existsSync(sessionLinePath(configDir, 'current-session')), true, 'the newly-written current-session line file must exist');
+});

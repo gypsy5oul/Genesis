@@ -177,6 +177,27 @@ function aggregateWeekly(entries, windowMs, nowMs) {
   };
 }
 
+// Best-effort reap of stale per-session line files. Nothing else ever
+// deletes these (one file gets created per session_id forever), so without
+// this the hooks' state directory accumulates a dotfile per session for the
+// lifetime of the tool. Reuses the same weekly horizon aggregateWeekly
+// already uses for history, rather than inventing a second retention window.
+// Never throws — a reap failure must not block the line write that matters.
+function reapStaleLineFiles(claudeDir, windowMs, nowMs) {
+  try {
+    const cutoff = nowMs - windowMs;
+    for (const name of fs.readdirSync(claudeDir)) {
+      if (!name.startsWith(LINE_BASENAME_PREFIX)) continue;
+      const p = path.join(claudeDir, name);
+      try {
+        const st = fs.lstatSync(p);
+        if (!st.isFile() || st.mtimeMs >= cutoff) continue;
+        fs.unlinkSync(p);
+      } catch { /* raced away or unreadable — skip this one file */ }
+    }
+  } catch { /* best-effort — never block the main write on a reap failure */ }
+}
+
 function renderLine(session, weekly) {
   const sessionTotal = totalTokens(session);
   const weeklyTotal = totalTokens(weekly);
@@ -221,6 +242,7 @@ function main() {
         const weekly = aggregateWeekly(entries, WEEK_MS, Date.now());
         const line = renderLine({ ...usage, estUsd }, weekly);
         if (line && linePath) writeFileSafe(claudeDir, linePath, line, { backup: false });
+        reapStaleLineFiles(claudeDir, WEEK_MS, Date.now());
       }
     } catch { /* silent — never block the session on a hook bug */ }
     process.exit(0);
@@ -232,7 +254,7 @@ if (require.main === module) main();
 module.exports = {
   computeSessionUsage, priceFor, estimateCost, humanizeTokens, formatUsd,
   totalTokens, readHistory, aggregateWeekly, renderLine, claudeConfigDir, safeNum,
-  sanitizeSessionId,
+  sanitizeSessionId, reapStaleLineFiles,
   MODEL_PRICING, CACHE_WRITE_MULTIPLIER, CACHE_READ_MULTIPLIER,
   HISTORY_BASENAME, LINE_BASENAME_PREFIX, WEEK_MS,
 };

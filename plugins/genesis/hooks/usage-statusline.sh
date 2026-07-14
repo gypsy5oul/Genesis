@@ -30,9 +30,16 @@ INPUT=$(cat)
 # on success; returns 1 (prints nothing) if the key or field is absent.
 extract_used_pct() {
   local key="$1" sub val
+  # If $INPUT ever contained a duplicate "$key" occurrence, head -n1 means
+  # the first one wins (documented behavior, not a bug).
   sub=$(printf '%s' "$INPUT" | grep -o "\"$key\"[[:space:]]*:[[:space:]]*{[^}]*}" | head -n1)
   [ -z "$sub" ] && return 1
-  val=$(printf '%s' "$sub" | grep -o '"used_percentage"[[:space:]]*:[[:space:]]*[0-9.]*' | head -n1 | sed -E 's/.*:[[:space:]]*//')
+  # Require the digits to be immediately followed by a proper JSON number
+  # boundary (`,`, `}`, or whitespace) so trailing garbage (e.g. `42xyz`) or
+  # unsupported notation (e.g. `4.2e1`) is rejected rather than silently
+  # truncated. The boundary char is captured by the match and stripped
+  # back off below.
+  val=$(printf '%s' "$sub" | grep -o '"used_percentage"[[:space:]]*:[[:space:]]*[0-9.]*[,}[:space:]]' | head -n1 | sed -E 's/.*:[[:space:]]*//; s/[,}[:space:]]$//')
   [ -z "$val" ] && return 1
   printf '%s' "$val"
 }

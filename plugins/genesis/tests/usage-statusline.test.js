@@ -82,6 +82,18 @@ test('non-numeric used_percentage value: prints nothing, exits 0', () => {
   assert.equal(r.stdout, '');
 });
 
+test('used_percentage in scientific notation: prints nothing, exits 0', () => {
+  const r = run('{"rate_limits":{"five_hour":{"used_percentage":4.2e1,"resets_at":"x"},"seven_day":{"used_percentage":18,"resets_at":"y"}}}');
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+});
+
+test('used_percentage followed by trailing garbage (malformed number): prints nothing, exits 0', () => {
+  const r = run('{"rate_limits":{"five_hour":{"used_percentage":42xyz,"resets_at":"x"},"seven_day":{"used_percentage":18,"resets_at":"y"}}}');
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+});
+
 test('malformed JSON on stdin: prints nothing, exits 0, does not crash', () => {
   const r = run('not json {{{');
   assert.equal(r.status, 0);

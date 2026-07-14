@@ -50,6 +50,18 @@ function parseMarkerBody(body) {
 // each one is non-blank, uses the EXACT SAME comment prefix as the marker
 // itself, and doesn't start a new `genesis:` marker of its own. The first
 // line that fails any of those checks ends the body right there.
+//
+// Guard against fabricating a trigger: if merging a continuation line would
+// flip noTrigger from true to false (i.e. the ONLY reason the merged body now
+// parses as having a trigger is that candidate line), only accept the merge
+// when the marker's own accumulated text so far still reads as mid-sentence
+// (doesn't already end with terminal punctuation `.` or `:`). A marker line
+// that already reads as a complete, standalone thought must not have a
+// trigger fabricated onto it by an unrelated same-prefix comment that merely
+// happens to contain a comma — that would mask the exact "incomplete
+// genesis: marker" signal this scanner exists to surface. When the merge
+// doesn't change noTrigger at all (the common case — most of a real
+// multi-line explanation), it's always accepted.
 function scanMarkers(source) {
   const found = [];
   const lines = source.split('\n');
@@ -66,7 +78,18 @@ function scanMarkers(source) {
       const trimmed = line.replace(/^\s+/, '');
       if (!trimmed.startsWith(prefix)) break; // different/no comment prefix
       if (MARKER_RE.test(line)) break; // a new genesis: marker starts fresh
-      bodyParts.push(trimmed.slice(prefix.length).trim());
+
+      const candidateText = trimmed.slice(prefix.length).trim();
+      const bodySoFar = bodyParts.join(' ');
+      const beforeMerge = parseMarkerBody(bodySoFar);
+      const afterMerge = parseMarkerBody(`${bodySoFar} ${candidateText}`);
+      if (beforeMerge.noTrigger && !afterMerge.noTrigger) {
+        const trimmedSoFar = bodySoFar.trim();
+        const looksMidSentence = !!trimmedSoFar && !/[.:]$/.test(trimmedSoFar);
+        if (!looksMidSentence) break; // body reads complete on its own — don't fabricate a trigger from an unrelated line
+      }
+
+      bodyParts.push(candidateText);
       mergedCount++;
       j++;
     }

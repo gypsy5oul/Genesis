@@ -126,6 +126,20 @@ test('scanMarkers does NOT merge a following comment line with a different comme
   ]);
 });
 
+test('regression: scanMarkers does NOT merge an adjacent unrelated same-prefix comment into a marker that already looks complete, even though the unrelated comment contains a comma (would fabricate a trigger)', () => {
+  const source = [
+    '// genesis: this shortcut is fine as is.',
+    '// unrelated note, with a comma in it that would otherwise look like a trigger',
+    ''
+  ].join('\n');
+  const found = scan.scanMarkers(source);
+  assert.equal(found.length, 1);
+  assert.equal(found[0].line, 1);
+  assert.equal(found[0].noTrigger, true, 'a complete-looking marker must not have a trigger fabricated from an unrelated following comment');
+  assert.equal(found[0].ceiling, 'this shortcut is fine as is.');
+  assert.equal(found[0].trigger, null);
+});
+
 test('scanMarkers caps continuation merging at a bounded number of lines', () => {
   const lines = ['// genesis: ceiling, trigger start'];
   for (let i = 0; i < 15; i++) lines.push(`// more words ${i}`);

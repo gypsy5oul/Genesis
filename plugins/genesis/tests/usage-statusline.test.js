@@ -15,6 +15,20 @@ function run(payload) {
   return spawnSync('bash', [SCRIPT], { input, encoding: 'utf8', timeout: 5000 });
 }
 
+// ANSI color-start codes per the thresholds documented in
+// hooks/usage-statusline.sh (>= 90 red, >= 70 yellow, < 70 green), plus the
+// reset code applied after each colored bar+percentage segment.
+const RED = '\x1b[31m';
+const YELLOW = '\x1b[33m';
+const GREEN = '\x1b[32m';
+const RESET = '\x1b[0m';
+
+// Builds the colored "[<bar>] <pct>%" segment text a usage block should
+// render as, given its own bar string, percentage, and expected color.
+function seg(color, bar, pct) {
+  return `${color}[${bar}] ${pct}%${RESET}`;
+}
+
 test('prints 5h/wk usage bars + model name from rate_limits + model on stdin', () => {
   const r = run({
     model: { id: 'claude-sonnet-5', display_name: 'Sonnet 5' },
@@ -26,7 +40,7 @@ test('prints 5h/wk usage bars + model name from rate_limits + model on stdin', (
   assert.equal(r.status, 0);
   assert.equal(
     r.stdout,
-    '[GENESIS] Sonnet 5 | 5h Usage [████░░░░░░] 42% | Weekly Usage [██░░░░░░░░] 18%'
+    `[GENESIS] Sonnet 5 | 5h Usage ${seg(GREEN, '████░░░░░░', 42)} | Weekly Usage ${seg(GREEN, '██░░░░░░░░', 18)}`
   );
 });
 
@@ -41,7 +55,7 @@ test('rounds decimal used_percentage values to the nearest whole percent', () =>
   assert.equal(r.status, 0);
   assert.equal(
     r.stdout,
-    '[GENESIS] Sonnet 5 | 5h Usage [████░░░░░░] 43% | Weekly Usage [██░░░░░░░░] 18%'
+    `[GENESIS] Sonnet 5 | 5h Usage ${seg(GREEN, '████░░░░░░', 43)} | Weekly Usage ${seg(GREEN, '██░░░░░░░░', 18)}`
   );
 });
 
@@ -53,7 +67,10 @@ test('rounds a decimal that carries into the next whole number (99.9 -> 100)', (
     },
   });
   assert.equal(r.status, 0);
-  assert.equal(r.stdout, '[GENESIS] 5h Usage [██████████] 100% | Weekly Usage [░░░░░░░░░░] 1%');
+  assert.equal(
+    r.stdout,
+    `[GENESIS] 5h Usage ${seg(RED, '██████████', 100)} | Weekly Usage ${seg(GREEN, '░░░░░░░░░░', 1)}`
+  );
 });
 
 test('missing rate_limits object entirely: prints nothing, exits 0', () => {
@@ -125,7 +142,7 @@ test('renders 0% and 100% bars as fully empty / fully filled', () => {
   assert.equal(r.status, 0);
   assert.equal(
     r.stdout,
-    '[GENESIS] Sonnet 5 | 5h Usage [░░░░░░░░░░] 0% | Weekly Usage [██████████] 100%'
+    `[GENESIS] Sonnet 5 | 5h Usage ${seg(GREEN, '░░░░░░░░░░', 0)} | Weekly Usage ${seg(RED, '██████████', 100)}`
   );
 });
 
@@ -140,7 +157,7 @@ test('rounds the filled-segment count at a half-block boundary (45% -> 5 filled,
   assert.equal(r.status, 0);
   assert.equal(
     r.stdout,
-    '[GENESIS] Sonnet 5 | 5h Usage [█████░░░░░] 45% | Weekly Usage [█░░░░░░░░░] 5%'
+    `[GENESIS] Sonnet 5 | 5h Usage ${seg(GREEN, '█████░░░░░', 45)} | Weekly Usage ${seg(GREEN, '█░░░░░░░░░', 5)}`
   );
 });
 
@@ -152,7 +169,10 @@ test('model absent: omits the model name and leading separator, usage data still
     },
   });
   assert.equal(r.status, 0);
-  assert.equal(r.stdout, '[GENESIS] 5h Usage [████░░░░░░] 42% | Weekly Usage [██░░░░░░░░] 18%');
+  assert.equal(
+    r.stdout,
+    `[GENESIS] 5h Usage ${seg(GREEN, '████░░░░░░', 42)} | Weekly Usage ${seg(GREEN, '██░░░░░░░░', 18)}`
+  );
 });
 
 test('model present but rate_limits missing: prints nothing (fail-safe wins), exits 0', () => {
@@ -173,7 +193,10 @@ test('model.display_name empty string: treated as absent, usage data still shows
     },
   });
   assert.equal(r.status, 0);
-  assert.equal(r.stdout, '[GENESIS] 5h Usage [████░░░░░░] 42% | Weekly Usage [██░░░░░░░░] 18%');
+  assert.equal(
+    r.stdout,
+    `[GENESIS] 5h Usage ${seg(GREEN, '████░░░░░░', 42)} | Weekly Usage ${seg(GREEN, '██░░░░░░░░', 18)}`
+  );
 });
 
 test('model.display_name non-string (number): treated as absent, usage data still shows', () => {
@@ -181,7 +204,10 @@ test('model.display_name non-string (number): treated as absent, usage data stil
     '{"model":{"id":"claude-sonnet-5","display_name":5},"rate_limits":{"five_hour":{"used_percentage":42},"seven_day":{"used_percentage":18}}}'
   );
   assert.equal(r.status, 0);
-  assert.equal(r.stdout, '[GENESIS] 5h Usage [████░░░░░░] 42% | Weekly Usage [██░░░░░░░░] 18%');
+  assert.equal(
+    r.stdout,
+    `[GENESIS] 5h Usage ${seg(GREEN, '████░░░░░░', 42)} | Weekly Usage ${seg(GREEN, '██░░░░░░░░', 18)}`
+  );
 });
 
 test('model.display_name containing an escaped quote (backslash): treated as absent, usage data still shows', () => {
@@ -189,5 +215,78 @@ test('model.display_name containing an escaped quote (backslash): treated as abs
     '{"model":{"id":"x","display_name":"Foo\\"Bar"},"rate_limits":{"five_hour":{"used_percentage":42},"seven_day":{"used_percentage":18}}}'
   );
   assert.equal(r.status, 0);
-  assert.equal(r.stdout, '[GENESIS] 5h Usage [████░░░░░░] 42% | Weekly Usage [██░░░░░░░░] 18%');
+  assert.equal(
+    r.stdout,
+    `[GENESIS] 5h Usage ${seg(GREEN, '████░░░░░░', 42)} | Weekly Usage ${seg(GREEN, '██░░░░░░░░', 18)}`
+  );
+});
+
+test('69%: colored green (just under the yellow threshold)', () => {
+  const r = run({
+    rate_limits: {
+      five_hour: { used_percentage: 69 },
+      seven_day: { used_percentage: 69 },
+    },
+  });
+  assert.equal(r.status, 0);
+  assert.equal(
+    r.stdout,
+    `[GENESIS] 5h Usage ${seg(GREEN, '███████░░░', 69)} | Weekly Usage ${seg(GREEN, '███████░░░', 69)}`
+  );
+});
+
+test('70%: colored yellow (yellow threshold boundary, inclusive)', () => {
+  const r = run({
+    rate_limits: {
+      five_hour: { used_percentage: 70 },
+      seven_day: { used_percentage: 70 },
+    },
+  });
+  assert.equal(r.status, 0);
+  assert.equal(
+    r.stdout,
+    `[GENESIS] 5h Usage ${seg(YELLOW, '███████░░░', 70)} | Weekly Usage ${seg(YELLOW, '███████░░░', 70)}`
+  );
+});
+
+test('89%: colored yellow (just under the red threshold)', () => {
+  const r = run({
+    rate_limits: {
+      five_hour: { used_percentage: 89 },
+      seven_day: { used_percentage: 89 },
+    },
+  });
+  assert.equal(r.status, 0);
+  assert.equal(
+    r.stdout,
+    `[GENESIS] 5h Usage ${seg(YELLOW, '█████████░', 89)} | Weekly Usage ${seg(YELLOW, '█████████░', 89)}`
+  );
+});
+
+test('90%: colored red (red threshold boundary, inclusive)', () => {
+  const r = run({
+    rate_limits: {
+      five_hour: { used_percentage: 90 },
+      seven_day: { used_percentage: 90 },
+    },
+  });
+  assert.equal(r.status, 0);
+  assert.equal(
+    r.stdout,
+    `[GENESIS] 5h Usage ${seg(RED, '█████████░', 90)} | Weekly Usage ${seg(RED, '█████████░', 90)}`
+  );
+});
+
+test('5h and weekly segments are colored independently (45% green vs 95% red)', () => {
+  const r = run({
+    rate_limits: {
+      five_hour: { used_percentage: 45 },
+      seven_day: { used_percentage: 95 },
+    },
+  });
+  assert.equal(r.status, 0);
+  assert.equal(
+    r.stdout,
+    `[GENESIS] 5h Usage ${seg(GREEN, '█████░░░░░', 45)} | Weekly Usage ${seg(RED, '██████████', 95)}`
+  );
 });

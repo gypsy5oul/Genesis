@@ -10,6 +10,21 @@
 # (the "<model_name> | " prefix is omitted entirely if model.display_name is
 # absent/unparseable — see extract_model_name).
 #
+# The "[<bar>] <pct>%" portion of each usage segment is individually
+# color-coded with ANSI escape codes based on that segment's own
+# percentage (the two segments are colored independently — one can be
+# green while the other is red):
+#   >= 90           -> red    \033[31m
+#   >= 70 and < 90  -> yellow \033[33m
+#   < 70            -> green  \033[32m
+# followed by a \033[0m reset immediately after each colored segment. This
+# is a documented Claude Code statusline feature — see "What your script
+# can output" / "Combine techniques" at
+# https://code.claude.com/docs/en/statusline, which uses this exact
+# threshold scheme as its own example. ANSI codes are only interpreted by
+# terminals that support them; unsupporting terminals will show the raw
+# escape sequences.
+#
 # Claude Code's statusline payload includes a `rate_limits` object shaped
 # like:
 #   { "rate_limits": {
@@ -108,6 +123,19 @@ render_bar() {
   printf '%s' "$bar"
 }
 
+# Return the ANSI color-start escape code for a 0-100 integer percentage,
+# per the thresholds documented in the header comment above.
+color_for_pct() {
+  local pct="$1"
+  if [ "$pct" -ge 90 ]; then
+    printf '\033[31m'
+  elif [ "$pct" -ge 70 ]; then
+    printf '\033[33m'
+  else
+    printf '\033[32m'
+  fi
+}
+
 FIVE_HOUR_RAW=$(extract_used_pct "five_hour") || exit 0
 SEVEN_DAY_RAW=$(extract_used_pct "seven_day") || exit 0
 
@@ -121,6 +149,10 @@ MODEL_PREFIX=""
 FIVE_HOUR_BAR=$(render_bar "$FIVE_HOUR_PCT" 10)
 SEVEN_DAY_BAR=$(render_bar "$SEVEN_DAY_PCT" 10)
 
-printf '[GENESIS] %s5h Usage [%s] %s%% | Weekly Usage [%s] %s%%' \
-  "$MODEL_PREFIX" "$FIVE_HOUR_BAR" "$FIVE_HOUR_PCT" "$SEVEN_DAY_BAR" "$SEVEN_DAY_PCT"
+FIVE_HOUR_COLOR=$(color_for_pct "$FIVE_HOUR_PCT")
+SEVEN_DAY_COLOR=$(color_for_pct "$SEVEN_DAY_PCT")
+
+printf '[GENESIS] %s5h Usage %s[%s] %s%%\033[0m | Weekly Usage %s[%s] %s%%\033[0m' \
+  "$MODEL_PREFIX" "$FIVE_HOUR_COLOR" "$FIVE_HOUR_BAR" "$FIVE_HOUR_PCT" \
+  "$SEVEN_DAY_COLOR" "$SEVEN_DAY_BAR" "$SEVEN_DAY_PCT"
 exit 0

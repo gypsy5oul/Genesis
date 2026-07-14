@@ -19,10 +19,17 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 // Anthropic changes rates. https://www.anthropic.com/pricing
 // Most-specific prefixes MUST come first — priceFor returns the first match.
 const MODEL_PRICING = [
+  ['claude-opus-4-8',     5.00, 25.00], // must precede the bare 'claude-opus-4' fallback below, which would otherwise shadow it (e.g. 'claude-opus-4-8[1m]'.startsWith('claude-opus-4'))
   ['claude-opus-4-5',     5.00, 25.00],
   ['claude-opus-4-1',    15.00, 75.00],
   ['claude-opus-4-0',    15.00, 75.00],
   ['claude-opus-4',      15.00, 75.00], // fallback: bare dated 4.0 IDs (e.g. claude-opus-4-20250514)
+  ['claude-fable-5',     10.00, 50.00],
+  // Introductory price for claude-sonnet-5 is $2.00/$10.00 through 2026-08-31;
+  // this codes the standard post-introductory rate ($3.00/$15.00) since this
+  // table is long-lived and the intro rate is temporary — revisit if pricing
+  // changes after the introductory period ends.
+  ['claude-sonnet-5',     3.00, 15.00],
   ['claude-sonnet-4-5',   3.00, 15.00],
   ['claude-sonnet-4',     3.00, 15.00],
   ['claude-haiku-4-5',    1.00,  5.00],

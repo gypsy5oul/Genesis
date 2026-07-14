@@ -73,6 +73,39 @@ test('priceFor resolves a dated claude-opus-4-5 ID to its own 5/25 tier, distinc
   assert.deepEqual({ input: p.input, output: p.output }, { input: 5.00, output: 25.00 });
 });
 
+test('priceFor resolves claude-opus-4-8 to its own 5/25 tier, not the bare claude-opus-4 (15/75) fallback', () => {
+  const p = ut.priceFor('claude-opus-4-8');
+  assert.deepEqual({ input: p.input, output: p.output }, { input: 5.00, output: 25.00 });
+});
+
+test('priceFor resolves claude-opus-4-8[1m] (bracket suffix variant) to the 5/25 tier, not the bare claude-opus-4 (15/75) fallback', () => {
+  const p = ut.priceFor('claude-opus-4-8[1m]');
+  assert.deepEqual({ input: p.input, output: p.output }, { input: 5.00, output: 25.00 });
+});
+
+test('priceFor resolves claude-sonnet-5 to 3.00/15.00, not null', () => {
+  const p = ut.priceFor('claude-sonnet-5');
+  assert.deepEqual({ input: p.input, output: p.output }, { input: 3.00, output: 15.00 });
+});
+
+test('priceFor resolves claude-fable-5 to 10.00/50.00, not null', () => {
+  const p = ut.priceFor('claude-fable-5');
+  assert.deepEqual({ input: p.input, output: p.output }, { input: 10.00, output: 50.00 });
+});
+
+test('priceFor still resolves claude-haiku-4-5 (dated ID) to the existing correct 1.00/5.00 tier', () => {
+  const p = ut.priceFor('claude-haiku-4-5-20251001');
+  assert.deepEqual({ input: p.input, output: p.output }, { input: 1.00, output: 5.00 });
+});
+
+test('estimateCost returns a real non-null dollar figure for claude-sonnet-5 at a realistic token count', () => {
+  const pricing = ut.priceFor('claude-sonnet-5');
+  const cost = ut.estimateCost({ inputTokens: 100000, outputTokens: 20000, cacheCreationTokens: 5000, cacheReadTokens: 50000 }, pricing);
+  assert.ok(typeof cost === 'number' && Number.isFinite(cost) && cost > 0, 'expected a real non-null dollar figure');
+  // 100000/1e6*3 + 20000/1e6*15 + 5000/1e6*3.75 + 50000/1e6*0.3
+  assert.ok(Math.abs(cost - (0.3 + 0.3 + 0.01875 + 0.015)) < 1e-9);
+});
+
 test('estimateCost prices all four token categories, cache-read cheapest', () => {
   const pricing = { input: 10, output: 20, cacheWrite: 12.5, cacheRead: 1 };
   const cost = ut.estimateCost({ inputTokens: 1e6, outputTokens: 1e6, cacheCreationTokens: 1e6, cacheReadTokens: 1e6 }, pricing);

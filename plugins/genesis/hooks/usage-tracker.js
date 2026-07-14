@@ -10,8 +10,19 @@ function claudeConfigDir() {
 }
 
 const HISTORY_BASENAME = '.genesis-usage-history.jsonl';
-const LINE_BASENAME = '.genesis-usage-line';
+const LINE_BASENAME_PREFIX = '.genesis-usage-line.';
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+// The session_id comes from an external JSON payload (the Stop hook's
+// stdin) and gets interpolated into a file path — restrict it to a safe
+// filename-component charset before use. An empty result (fully stripped)
+// means "no safe id" — callers must skip the per-session write entirely
+// rather than fall back to a fixed/predictable/collidable path, which would
+// just reintroduce the cross-session collision this scoping fixes.
+function sanitizeSessionId(sessionId) {
+  if (typeof sessionId !== 'string') return '';
+  return sessionId.replace(/[^A-Za-z0-9_-]/g, '');
+}
 
 // USD per million tokens. Cache write/read priced as multiples of the base
 // input price per Anthropic's published cache-pricing structure (write
@@ -190,7 +201,8 @@ function main() {
         const estUsd = estimateCost(usage, pricing);
         const claudeDir = claudeConfigDir();
         const historyPath = path.join(claudeDir, HISTORY_BASENAME);
-        const linePath = path.join(claudeDir, LINE_BASENAME);
+        const safeSessionId = sanitizeSessionId(sessionId);
+        const linePath = safeSessionId ? path.join(claudeDir, LINE_BASENAME_PREFIX + safeSessionId) : null;
 
         if (usage.turns > 0) {
           appendFileSafe(claudeDir, historyPath, JSON.stringify({
@@ -208,7 +220,7 @@ function main() {
         const entries = readHistory(historyPath);
         const weekly = aggregateWeekly(entries, WEEK_MS, Date.now());
         const line = renderLine({ ...usage, estUsd }, weekly);
-        if (line) writeFileSafe(claudeDir, linePath, line, { backup: false });
+        if (line && linePath) writeFileSafe(claudeDir, linePath, line, { backup: false });
       }
     } catch { /* silent — never block the session on a hook bug */ }
     process.exit(0);
@@ -220,6 +232,7 @@ if (require.main === module) main();
 module.exports = {
   computeSessionUsage, priceFor, estimateCost, humanizeTokens, formatUsd,
   totalTokens, readHistory, aggregateWeekly, renderLine, claudeConfigDir, safeNum,
+  sanitizeSessionId,
   MODEL_PRICING, CACHE_WRITE_MULTIPLIER, CACHE_READ_MULTIPLIER,
-  HISTORY_BASENAME, LINE_BASENAME, WEEK_MS,
+  HISTORY_BASENAME, LINE_BASENAME_PREFIX, WEEK_MS,
 };

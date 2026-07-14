@@ -201,23 +201,127 @@ test('readHistory rejects a symlinked history file', () => {
   assert.equal(ut.readHistory(linked).length, 0);
 });
 
-test('hook mode: end-to-end run appends history and writes the pre-rendered line', () => {
+function runHook(configDir, payload) {
+  return spawnSync(process.execPath, [path.join(__dirname, '..', 'hooks', 'usage-tracker.js')], {
+    input: JSON.stringify(payload),
+    encoding: 'utf8', timeout: 5000,
+    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir }
+  });
+}
+
+function sessionLinePath(configDir, sessionId) {
+  return path.join(configDir, `${ut.LINE_BASENAME_PREFIX}${sessionId}`);
+}
+
+test('hook mode: end-to-end run appends history and writes the pre-rendered line to a SESSION-SCOPED file', () => {
   const configDir = tmpConfigDir();
   const transcript = writeTranscript(configDir, [
     assistantMsg({ input_tokens: 10000, output_tokens: 2400, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }),
   ]);
-  const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'hooks', 'usage-tracker.js')], {
-    input: JSON.stringify({ session_id: 'sess-1', transcript_path: transcript, cwd: configDir }),
-    encoding: 'utf8', timeout: 5000,
-    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir }
-  });
+  const r = runHook(configDir, { session_id: 'sess-1', transcript_path: transcript, cwd: configDir });
   assert.equal(r.status, 0);
   const history = ut.readHistory(path.join(configDir, ut.HISTORY_BASENAME));
   assert.equal(history.length, 1);
   assert.equal(history[0].session_id, 'sess-1');
   assert.equal(history[0].input_tokens, 10000);
-  const line = fs.readFileSync(path.join(configDir, ut.LINE_BASENAME), 'utf8');
+  const line = fs.readFileSync(sessionLinePath(configDir, 'sess-1'), 'utf8');
   assert.match(line, /\[GENESIS\]/);
+});
+
+test('regression: two concurrent sessions write two DIFFERENT line files with independent content (would have collided under the old shared-file behavior)', () => {
+  const configDir = tmpConfigDir();
+  const transcriptA = writeTranscript(configDir, [
+    assistantMsg({ input_tokens: 10000, output_tokens: 1000, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }),
+  ]);
+  const rA = runHook(configDir, { session_id: 'session-aaa', transcript_path: transcriptA, cwd: configDir });
+  assert.equal(rA.status, 0);
+
+  // Rename the transcript so the second run's usage is unambiguously
+  // different (and doesn't merely append to the same weekly history in a
+  // way that would mask independent per-session content).
+  const transcriptB = path.join(configDir, 'transcript-b.jsonl');
+  fs.writeFileSync(transcriptB, [
+    JSON.stringify(assistantMsg({ input_tokens: 500000, output_tokens: 90000, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 })),
+  ].join('\n') + '\n');
+  const rB = runHook(configDir, { session_id: 'session-bbb', transcript_path: transcriptB, cwd: configDir });
+  assert.equal(rB.status, 0);
+
+  const lineA = fs.readFileSync(sessionLinePath(configDir, 'session-aaa'), 'utf8');
+  const lineB = fs.readFileSync(sessionLinePath(configDir, 'session-bbb'), 'utf8');
+  assert.notEqual(lineA, lineB, 'each session must get its own independent line content');
+  assert.match(lineA, /11k tok/); // 10000 + 1000
+  assert.match(lineB, /590k tok/); // 500000 + 90000
+});
+
+test('a session_id containing unsafe characters is sanitized to a safe filename component before use', () => {
+  const configDir = tmpConfigDir();
+  const transcript = writeTranscript(configDir, [
+    assistantMsg({ input_tokens: 1000, output_tokens: 100, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }),
+  ]);
+  const dirty = '../../etc/passwd; rm -rf';
+  const r = runHook(configDir, { session_id: dirty, transcript_path: transcript, cwd: configDir });
+  assert.equal(r.status, 0);
+  const expected = sessionLinePath(configDir, ut.sanitizeSessionId(dirty));
+  assert.ok(fs.existsSync(expected), 'expected the sanitized-name line file to exist');
+  const line = fs.readFileSync(expected, 'utf8');
+  assert.match(line, /\[GENESIS\]/);
+});
+
+test('sanitizeSessionId strips unsafe characters, keeps alnum/hyphen/underscore', () => {
+  assert.equal(ut.sanitizeSessionId('abc-123_XYZ'), 'abc-123_XYZ');
+  assert.equal(ut.sanitizeSessionId('../../etc/passwd'), 'etcpasswd');
+  assert.equal(ut.sanitizeSessionId('a b/c:d'), 'abcd');
+  assert.equal(ut.sanitizeSessionId(''), '');
+  assert.equal(ut.sanitizeSessionId(null), '');
+});
+
+test('when sanitizing a session_id strips it to empty, no line file is written at all (never falls back to a fixed/collidable path)', () => {
+  const configDir = tmpConfigDir();
+  const transcript = writeTranscript(configDir, [
+    assistantMsg({ input_tokens: 1000, output_tokens: 100, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }),
+  ]);
+  // A session_id made entirely of characters the sanitizer strips.
+  const r = runHook(configDir, { session_id: '!!!///:::', transcript_path: transcript, cwd: configDir });
+  assert.equal(r.status, 0);
+  const entries = fs.readdirSync(configDir);
+  const lineFiles = entries.filter(f => f.startsWith('.genesis-usage-line'));
+  assert.equal(lineFiles.length, 0, 'no line file of any name should be written when the sanitized session id is empty');
+  // History (session-scoped by field, not by filename) still gets written —
+  // only the per-turn line file write is skipped.
+  const history = ut.readHistory(path.join(configDir, ut.HISTORY_BASENAME));
+  assert.equal(history.length, 1);
+});
+
+test('the old fixed global .genesis-usage-line file is no longer written', () => {
+  const configDir = tmpConfigDir();
+  const transcript = writeTranscript(configDir, [
+    assistantMsg({ input_tokens: 10000, output_tokens: 2400, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }),
+  ]);
+  const r = runHook(configDir, { session_id: 'sess-1', transcript_path: transcript, cwd: configDir });
+  assert.equal(r.status, 0);
+  assert.equal(fs.existsSync(path.join(configDir, '.genesis-usage-line')), false,
+    'the old global fixed-path line file must not be written anymore');
+});
+
+test('the weekly aggregate is unaffected by per-session line-file scoping: it still reads the single shared history file', () => {
+  const configDir = tmpConfigDir();
+  const transcriptA = writeTranscript(configDir, [
+    assistantMsg({ input_tokens: 1000, output_tokens: 100, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }),
+  ]);
+  runHook(configDir, { session_id: 'sess-a', transcript_path: transcriptA, cwd: configDir });
+
+  const transcriptB = path.join(configDir, 'transcript-b.jsonl');
+  fs.writeFileSync(transcriptB, JSON.stringify(assistantMsg({ input_tokens: 2000, output_tokens: 200, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 })) + '\n');
+  runHook(configDir, { session_id: 'sess-b', transcript_path: transcriptB, cwd: configDir });
+
+  const historyPath = path.join(configDir, ut.HISTORY_BASENAME);
+  assert.equal(fs.existsSync(historyPath), true, 'history stays a single shared file');
+  const entries = ut.readHistory(historyPath);
+  assert.equal(entries.length, 2);
+  const weekly = ut.aggregateWeekly(entries, ut.WEEK_MS, Date.now());
+  assert.equal(weekly.sessions, 2);
+  assert.equal(weekly.inputTokens, 3000);
+  assert.equal(weekly.outputTokens, 300);
 });
 
 test('hook mode: exits 0 on garbage stdin, writes nothing', () => {

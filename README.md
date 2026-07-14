@@ -2,7 +2,7 @@
 
 **Build production-ready software in Claude Code — from idea to deployment, one reviewed stage at a time.**
 
-Genesis is a Claude Code plugin for developing and shipping real applications with engineering discipline. It structures the work into the full software lifecycle — requirements, feasibility, planning, design, development, testing, UAT, deployment, monitoring, maintenance — and puts a quality gate you control between every stage. Every artifact is drafted, adversarially reviewed, and fixed before it reaches you. It also keeps a live, queryable map of your codebase and a live read on what the session is costing you — both updated automatically, at zero model-token cost.
+Genesis is a Claude Code plugin for developing and shipping real applications with engineering discipline. It structures the work into the full software lifecycle — requirements, feasibility, planning, design, development, testing, UAT, deployment, monitoring, maintenance — and puts a quality gate you control between every stage. Every artifact is drafted, adversarially reviewed, and fixed before it reaches you. It also keeps a live, queryable map of your codebase and a live read on your Claude plan usage — both updated automatically, at zero model-token cost.
 
 ```
 /genesis:init  →  "a URL shortener for internal links"
@@ -126,7 +126,7 @@ Honest, mechanism-grounded comparison — not benchmark numbers, since no contro
 | **Architectural consistency at scale** | Drifts as the session gets longer and context gets diluted; two features can quietly contradict each other | ADRs bind every builder; "ADR wins architecture" is an enforced conflict rule, not a suggestion | Ten parallel tasks converging on one design needs a written contract, not shared memory |
 | **Continuity across sessions/`/clear`/teammates** | Starts from zero context every time unless you re-explain | State lives in the repo; a hook briefs any new session on exactly where the build stands | Prompting has no persistence layer of its own |
 | **Cost of "where is X" / "what calls Y"** | A fresh grep-and-read of the tree, every time, in every session | Answered from a maintained index at zero model tokens, auto-updated after every edit | The index amortizes the one-time cost of understanding the codebase instead of re-paying it per question |
-| **Visibility into what a session is costing** | None, unless you're watching token counters yourself | Live session + weekly usage and an estimated cost, updated every turn | Nothing to compare against without a live number |
+| **Visibility into your plan usage** | Only by manually checking `/usage` or claude.ai | Live 5-hour and weekly plan usage %, color-coded, in the statusline itself | Nothing to compare against without a live, always-visible number |
 | **Upfront cost for a small, one-off script** | Lowest — one prompt, one response | Higher — requirements/feasibility/plan/design are real LLM calls even for a tiny task | Genesis's structure is overhead you're paying for whether or not the project is big enough to need it |
 | **Cost over a large, multi-week build** | Can be lower per-turn, but rework from missed requirements, re-discovered context, and repeated re-exploration adds up across the whole project | Amortized: the up-front stages, the index, and the review loop are one-time/incremental costs that avoid the larger, harder-to-see cost of rework | This is a bet that avoided rework outweighs the added review/process overhead — true for real applications, not for a 20-line script |
 

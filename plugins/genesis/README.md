@@ -17,6 +17,8 @@ Everything else — stage gates, approvals, the review loop, and the `genesis:` 
 
 Local dev: clone this repo, run `npm install` at the repo root (a `postinstall` step installs the plugin's own native deps), then run Claude Code with `--plugin-dir <path-to-your-clone>/plugins/genesis`.
 
+**Usage tracking (optional, one nudge).** A plugin can't auto-set your `statusLine` (only `agent`/`subagentStatusLine` are plugin-configurable) — Genesis offers to set it up itself the first time you start a session, or run `/statusline use the script at <path-to-installed-plugin>/hooks/usage-statusline.sh` yourself (find the path with `claude plugin list`; don't hardcode a version number, it changes on update).
+
 ## Usage
 
 | Command | Stage | Artifact |

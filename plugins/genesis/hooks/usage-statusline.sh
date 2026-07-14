@@ -63,7 +63,12 @@ extract_model_name() {
   local sub name
   sub=$(printf '%s' "$INPUT" | grep -o '"model"[[:space:]]*:[[:space:]]*{[^}]*}' | head -n1)
   [ -z "$sub" ] && return 1
-  name=$(printf '%s' "$sub" | grep -o '"display_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n1 | sed -E 's/.*:[[:space:]]*"//; s/"$//')
+  # The value char class excludes backslash as well as the closing quote,
+  # so any backslash-escape sequence inside the string (an escaped quote
+  # \", an escaped backslash \\, or any other JSON escape) prevents the
+  # match entirely rather than truncating at the first escaped char —
+  # same fail-safe posture as extract_used_pct's numeric boundary check.
+  name=$(printf '%s' "$sub" | grep -o '"display_name"[[:space:]]*:[[:space:]]*"[^"\\]*"' | head -n1 | sed -E 's/.*:[[:space:]]*"//; s/"$//')
   [ -z "$name" ] && return 1
   printf '%s' "$name"
 }

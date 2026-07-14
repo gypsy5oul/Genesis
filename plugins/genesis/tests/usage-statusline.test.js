@@ -183,3 +183,11 @@ test('model.display_name non-string (number): treated as absent, usage data stil
   assert.equal(r.status, 0);
   assert.equal(r.stdout, '[GENESIS] 5h Usage [████░░░░░░] 42% | Weekly Usage [██░░░░░░░░] 18%');
 });
+
+test('model.display_name containing an escaped quote (backslash): treated as absent, usage data still shows', () => {
+  const r = run(
+    '{"model":{"id":"x","display_name":"Foo\\"Bar"},"rate_limits":{"five_hour":{"used_percentage":42},"seven_day":{"used_percentage":18}}}'
+  );
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '[GENESIS] 5h Usage [████░░░░░░] 42% | Weekly Usage [██░░░░░░░░] 18%');
+});
